@@ -276,7 +276,14 @@ class CodeBlockView {
     return false
   }
 
-  ignoreMutation() { return true }
+  // Only ignore mutations OUTSIDE the contentDOM (<code>).
+  // Mutations inside contentDOM must be tracked by ProseMirror so the
+  // editor state stays in sync with the DOM — otherwise the cursor can
+  // end up at the wrong position (e.g. jumping out of the code block).
+  ignoreMutation(mutation) {
+    if (!this.contentDOM || !this.contentDOM.contains(mutation.target)) return true
+    return false
+  }
   destroy() {
     if (this.pre) this.pre._codeBlockView = null
   }
@@ -488,11 +495,15 @@ export const CodeBlock = NodeExtension.create({
   },
 
   addInputRules() {
-    return [new InputRule(/^```$/, (state, match, start, end) => {
-      const matchStart = start - match[0].length
+    return [new InputRule(/^```$/, (state, match, start, _end) => {
+      // `start` is the absolute position in the state where the matched
+      // text begins (the inputrules `run` function already accounts for
+      // the lookbehind vs typed-text offset). We need to replace the
+      // entire block that contains the match with a code_block.
+      const $start = state.doc.resolve(start)
       const codeBlock = state.schema.nodes.code_block.create({ language: '' })
-      const tr = state.tr.replaceWith(matchStart, end, codeBlock)
-      const blockPos = tr.doc.resolve(matchStart + 1)
+      const tr = state.tr.replaceWith($start.before(), $start.after(), codeBlock)
+      const blockPos = tr.doc.resolve($start.before() + 1)
       tr.setSelection(TextSelection.near(blockPos))
       return tr
     })]

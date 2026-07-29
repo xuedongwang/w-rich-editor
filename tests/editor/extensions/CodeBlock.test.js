@@ -295,6 +295,22 @@ describe('CodeBlock 键盘快捷键', () => {
     expect(text).toContain('bbb')
     expect(text).toContain('ccc')
   })
+
+  it('Enter 后光标仍在代码块内（不跳到外部）', () => {
+    editor = createEditor({ content: '<pre><code>line1</code></pre>' })
+    setCursor(editor, 6) // end of "line1" inside code_block
+    const ext = editor.extensions.find(e => e.name === 'code_block')
+    const shortcuts = ext._addKeyboardShortcuts.call(ext)
+    shortcuts.Enter(editor.state, editor.view.dispatch)
+
+    // Cursor must remain inside the code_block
+    const sel = editor.state.selection
+    expect(sel.$from.parent.type.name).toBe('code_block')
+
+    // DOM content should reflect the inserted newline
+    const code = editor.view.dom.querySelector('pre.code-block code')
+    expect(code.textContent).toContain('\n')
+  })
 })
 
 describe('CodeBlock 输入规则', () => {
@@ -308,6 +324,26 @@ describe('CodeBlock 输入规则', () => {
     expect(/^```$/.test('```')).toBe(true)
     expect(/^```$/.test('``')).toBe(false)
     expect(/^```$/.test('````')).toBe(false)
+  })
+
+  it('输入 ``` 不抛出 RangeError（start 在 match 起点）', () => {
+    // 模拟 readDOMChange 路径：state 尚未包含刚输入的字符
+    // state = "<p>``</p>"，用户刚键入第三个 `
+    // inputrules.run 计算出 start = 1（旧状态中 match 起点），
+    // match[0] = "```"（长度 3）。handler 应替换整个段落为代码块。
+    editor = createEditor({ content: '<p>``</p>' })
+    const ext = editor.extensions.find(e => e.name === 'code_block')
+    const rules = ext._addInputRules.call(ext)
+    const handler = rules[0].handler
+
+    const match = ['```']
+    // 不应抛出 "Position -2 out of range"
+    const tr = handler(editor.state, match, 1, 3)
+    expect(tr).toBeTruthy()
+    // 事务应将段落替换为代码块
+    expect(tr.doc.firstChild.type.name).toBe('code_block')
+    // 光标应位于代码块内部
+    expect(tr.selection.$from.parent.type.name).toBe('code_block')
   })
 })
 

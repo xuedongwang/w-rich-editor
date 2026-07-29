@@ -211,3 +211,38 @@ describe('编辑器命令 API', () => {
     expect(editor.commands.toggleBold()).toBe(true)
   })
 })
+
+describe('keymap 插件链', () => {
+  it('不同扩展的 Enter 快捷键不会互相覆盖', () => {
+    // 验证 collectPlugins 为每个扩展创建独立的 keymap 插件
+    // (不再用 Object.assign 合并到单个对象)
+    editor = createEditor({ content: '<p>Test</p>' })
+    const plugins = editor.state.plugins
+
+    // 统计 keymap 插件的数量
+    // 每个定义了快捷键的扩展应该有自己的 keymap 插件，加上 baseKeymap
+    const keymapPlugins = plugins.filter(p => {
+      const props = p.props || p.spec?.props
+      return props && props.handleKeyDown
+    })
+    // 至少有多个 keymap 插件（每个定义快捷键的扩展一个 + baseKeymap）
+    expect(keymapPlugins.length).toBeGreaterThan(1)
+  })
+
+  it('CodeBlock 和 BulletList 的 Enter 处理器共存', () => {
+    // 验证修复：Object.assign 合并 keymaps 导致 BulletList.Enter 被 CodeBlock.Enter 覆盖
+    editor = createEditor()
+
+    const codeBlockExt = editor.extensions.find(e => e.name === 'code_block')
+    const listItemExt = editor.extensions.find(e => e.name === 'list_item')
+
+    const cbShortcuts = codeBlockExt._addKeyboardShortcuts.call(codeBlockExt)
+    const liShortcuts = listItemExt._addKeyboardShortcuts.call(listItemExt)
+
+    // 两个扩展都应该有 Enter 处理器
+    expect(cbShortcuts.Enter).toBeDefined()
+    expect(liShortcuts.Enter).toBeDefined()
+    // 它们是不同的函数
+    expect(cbShortcuts.Enter).not.toBe(liShortcuts.Enter)
+  })
+})

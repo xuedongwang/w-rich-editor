@@ -105,23 +105,33 @@ export const ListItem = NodeExtension.create({
   },
 
   addKeyboardShortcuts() {
+    // Helper: check if the cursor is inside a list_item (at any depth).
+    // When the cursor is inside <li><p>text</p></li>, $from.parent is
+    // the <p>, not the <li>. We need to walk up the ancestor chain.
+    const isInsideListItem = ($from, listItemType) => {
+      for (let d = $from.depth; d > 0; d--) {
+        if ($from.node(d).type === listItemType) return true
+      }
+      return false
+    }
+
     return {
       Enter: (state, dispatch) => {
         const li = state.schema.nodes.list_item
         if (!li) return false
-        if (state.selection.$from.parent.type !== li) return false
+        if (!isInsideListItem(state.selection.$from, li)) return false
         return splitListItem(li)(state, dispatch)
       },
       Tab: (state, dispatch) => {
         const li = state.schema.nodes.list_item
         if (!li) return false
-        if (state.selection.$from.parent.type !== li) return false
+        if (!isInsideListItem(state.selection.$from, li)) return false
         return sinkListItem(li)(state, dispatch)
       },
       'Shift-Tab': (state, dispatch) => {
         const li = state.schema.nodes.list_item
         if (!li) return false
-        if (state.selection.$from.parent.type !== li) return false
+        if (!isInsideListItem(state.selection.$from, li)) return false
         return liftListItem(li)(state, dispatch)
       },
     }

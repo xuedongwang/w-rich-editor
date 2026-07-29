@@ -178,7 +178,6 @@ export class Editor {
   collectPlugins() {
     const plugins = []
     const allInputRules = []
-    const allKeymaps = {}
 
     for (const ext of this.extensions) {
       if (ext._addProseMirrorPlugins) {
@@ -191,17 +190,20 @@ export class Editor {
         allInputRules.push(...rules)
       }
 
+      // Each extension gets its own keymap plugin so handlers don't
+      // silently overwrite each other (Object.assign would lose earlier
+      // bindings when two extensions define the same key, e.g. Enter).
+      // ProseMirror tries keymap plugins in order — first to return true wins.
       if (ext._addKeyboardShortcuts) {
         const shortcuts = ext._addKeyboardShortcuts.call(ext)
-        Object.assign(allKeymaps, shortcuts)
+        if (Object.keys(shortcuts).length > 0) {
+          plugins.push(keymap(shortcuts))
+        }
       }
     }
 
     if (allInputRules.length > 0) {
       plugins.push(createInputRules({ rules: allInputRules }))
-    }
-    if (Object.keys(allKeymaps).length > 0) {
-      plugins.push(keymap(allKeymaps))
     }
     plugins.push(keymap(baseKeymap))
 

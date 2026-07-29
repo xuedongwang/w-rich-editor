@@ -128,6 +128,31 @@ describe('列表快捷键', () => {
     expect(editor.state.doc.textContent.length).toBeGreaterThan(0)
   })
 
+  it('通过 keymap 插件链在列表中按 Enter 可正常分割（不被 CodeBlock Enter 覆盖）', () => {
+    editor = createEditor({ content: '<ul><li><p>Item 1</p></li></ul>' })
+    setCursor(editor, 6) // inside "Item 1"
+    // Simulate keymap chain: find the list_item Enter handler through plugins
+    const listItemExt = editor.extensions.find(e => e.name === 'list_item')
+    const codeBlockExt = editor.extensions.find(e => e.name === 'code_block')
+
+    // Both extensions should have Enter handlers
+    const liShortcuts = listItemExt._addKeyboardShortcuts.call(listItemExt)
+    const cbShortcuts = codeBlockExt._addKeyboardShortcuts.call(codeBlockExt)
+    expect(liShortcuts.Enter).toBeDefined()
+    expect(cbShortcuts.Enter).toBeDefined()
+
+    // CodeBlock.Enter should NOT handle list items
+    expect(cbShortcuts.Enter(editor.state, editor.view.dispatch)).toBe(false)
+    // ListItem.Enter SHOULD handle it
+    expect(liShortcuts.Enter(editor.state, editor.view.dispatch)).toBe(true)
+    // List should be split into 2 items
+    const items = []
+    editor.state.doc.descendants(node => {
+      if (node.type.name === 'list_item') items.push(node)
+    })
+    expect(items.length).toBe(2)
+  })
+
   it('不在列表中时 Tab 返回 false', () => {
     editor = createEditor({ content: '<p>Not a list</p>' })
     setCursor(editor, 1)
