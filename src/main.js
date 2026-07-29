@@ -1,5 +1,8 @@
 import 'prosemirror-view/style/prosemirror.css'
 import 'prismjs/themes/prism-tomorrow.css'
+import './editor/style.css'
+import './editor/content.css'
+import './editor/extensions/image-upload.css'
 import './style.css'
 import { Editor } from './editor/index.js'
 import {
@@ -7,7 +10,8 @@ import {
   BulletList, OrderedList, ListItem,
   Blockquote, CodeBlock, Divider,
   Bold, Italic, Code,
-  History, DropCursorExt,
+  History, DropCursorExt, TextAlign, MarkdownPaste,
+  Image, ImageUpload,
 } from './editor/index.js'
 
 // ============================================================================
@@ -59,6 +63,14 @@ function updateBlockSelect(ed) {
   }
 }
 
+function updateAlignSelect(ed) {
+  const select = document.getElementById('align-select')
+  if (!select) return
+  const { $from } = ed.state.selection
+  const align = $from.parent.attrs?.align || 'left'
+  select.value = align
+}
+
 // ============================================================================
 // Create Editor
 // ============================================================================
@@ -71,7 +83,7 @@ const editor = new Editor({
     <h2>功能演示</h2>
     <ul>
       <li><p>加粗、斜体、行内代码</p></li>
-      <li><p>标题（H1-H3）</p></li>
+      <li><p>标题（H1-H6）</p></li>
       <li><p>有序列表 &amp; 无序列表</p></li>
       <li><p>引用块</p></li>
       <li><p>代码块</p></li>
@@ -104,14 +116,22 @@ console.log("Result: " + result) // 55</code></pre>
     Code.resolve(),
     History.resolve(),
     DropCursorExt.resolve(),
+    TextAlign.resolve(),
+    Image.resolve(),
+    ImageUpload.configure({
+      useBase64: true,
+    }),
+    MarkdownPaste.resolve(),
   ],
   onUpdate({ editor }) {
     updateToolbarState(editor)
     updateBlockSelect(editor)
+    updateAlignSelect(editor)
   },
   onSelectionUpdate({ editor }) {
     updateToolbarState(editor)
     updateBlockSelect(editor)
+    updateAlignSelect(editor)
   },
 })
 
@@ -147,6 +167,9 @@ blockSelect.innerHTML = `
   <option value="heading-1">标题 1</option>
   <option value="heading-2">标题 2</option>
   <option value="heading-3">标题 3</option>
+  <option value="heading-4">标题 4</option>
+  <option value="heading-5">标题 5</option>
+  <option value="heading-6">标题 6</option>
   <option value="bullet-list">无序列表</option>
   <option value="ordered-list">有序列表</option>
   <option value="blockquote">引用</option>
@@ -159,6 +182,9 @@ blockSelect.addEventListener('change', () => {
     'heading-1': () => editor.commands.toggleHeading?.({ level: 1 }),
     'heading-2': () => editor.commands.toggleHeading?.({ level: 2 }),
     'heading-3': () => editor.commands.toggleHeading?.({ level: 3 }),
+    'heading-4': () => editor.commands.toggleHeading?.({ level: 4 }),
+    'heading-5': () => editor.commands.toggleHeading?.({ level: 5 }),
+    'heading-6': () => editor.commands.toggleHeading?.({ level: 6 }),
     'bullet-list': () => editor.commands.toggleBulletList?.(),
     'ordered-list': () => editor.commands.toggleOrderedList?.(),
     'blockquote': () => editor.commands.toggleBlockquote?.(),
@@ -168,6 +194,22 @@ blockSelect.addEventListener('change', () => {
   editor.view.focus()
 })
 toolbar.appendChild(blockSelect)
+toolbar.appendChild(divider())
+
+// Text alignment dropdown
+const alignSelect = document.createElement('select')
+alignSelect.id = 'align-select'
+alignSelect.innerHTML = `
+  <option value="left">左对齐</option>
+  <option value="center">居中</option>
+  <option value="right">右对齐</option>
+  <option value="justify">两端对齐</option>
+`
+alignSelect.addEventListener('change', () => {
+  editor.commands.setTextAlign?.({ align: alignSelect.value })
+  editor.view.focus()
+})
+toolbar.appendChild(alignSelect)
 toolbar.appendChild(divider())
 
 // Inline marks

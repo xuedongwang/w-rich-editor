@@ -1,0 +1,194 @@
+/* ============================================================================
+   Image Node — Container & Base
+   ========================================================================= */
+
+.w-rich-editor .image-wrapper {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0.8em auto;
+  line-height: 0;
+}
+
+.w-rich-editor .image-wrapper .editor-image {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 4px;
+  transition: opacity 0.2s;
+}
+
+/* ============================================================================
+   Image Block Alignment
+   ========================================================================= */
+
+.w-rich-editor .image-wrapper.align-left {
+  float: left;
+  margin: 0.5em 1.2em 0.5em 0;
+}
+
+.w-rich-editor .image-wrapper.align-right {
+  float: right;
+  margin: 0.5em 0 0.5em 1.2em;
+}
+
+/* align-center is the default (no float, auto margins) */
+
+/* ============================================================================
+   Loading Overlay
+   ========================================================================= */
+
+.w-rich-editor .image-wrapper .image-loading-overlay {
+  display: none;
+}
+
+.w-rich-editor .image-wrapper.is-uploading .image-loading-overlay {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 4px;
+  z-index: 1;
+}
+
+.w-rich-editor .image-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: image-spin 0.8s linear infinite;
+}
+
+@keyframes image-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================================================
+   Error Overlay
+   ========================================================================= */
+
+.w-rich-editor .image-wrapper .image-error-overlay {
+  display: none;
+}
+
+.w-rich-editor .image-wrapper.has-error .image-error-overlay {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 4px;
+  color: #dc2626;
+  font-size: 13px;
+  line-height: 1.4;
+  gap: 4px;
+  z-index: 2;
+}
+
+.w-rich-editor .image-error-icon {
+  font-size: 20px;
+}
+
+.w-rich-editor .image-error-text {
+  max-width: 200px;
+  text-align: center;
+  word-break: break-word;
+}
+
+/* ============================================================================
+   Selection State
+   ========================================================================= */
+
+.w-rich-editor .image-wrapper img.ProseMirror-selectednode {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   Resize Handle
+   ========================================================================= */
+
+.w-rich-editor .image-wrapper .image-resize-handle {
+  display: none;
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 14px;
+  height: 14px;
+  background: #6366f1;
+  border: 2px solid #fff;
+  border-radius: 2px;
+  cursor: se-resize;
+  z-index: 5;
+  transition: background 0.15s;
+}
+
+.w-rich-editor .image-wrapper:hover .image-resize-handle,
+.w-rich-editor .image-wrapper.is-resizing .image-resize-handle {
+  display: block;
+}
+
+.w-rich-editor .image-resize-handle:hover {
+  background: #4f46e5;
+}
+
+/* Resize in progress — overlay blocks interaction, cursor stays consistent */
+.w-rich-editor .image-wrapper.is-resizing .image-resize-overlay {
+  position: absolute;
+  inset: -8px;
+  z-index: 10;
+  cursor: se-resize;
+}
+
+/* ============================================================================
+   Caption — max-width matches image via fit-content wrapper
+   ========================================================================= */
+
+.w-rich-editor .image-wrapper .image-caption {
+  display: block;
+  width: 100%;
+  margin-top: 0;
+  padding: 2px 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6b7280;
+  text-align: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  outline: none;
+  background: transparent;
+  transition: border-color 0.15s, background 0.15s;
+  min-height: 1.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.w-rich-editor .image-wrapper .image-caption:focus {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.w-rich-editor .image-wrapper .image-caption:empty::before {
+  content: attr(data-placeholder);
+  color: #adb5bd;
+  pointer-events: none;
+}
+
+.w-rich-editor .image-wrapper .image-caption:focus {
+  border-color: #c7d2fe;
+  background: #fafafa;
+  color: #374151;
+}
+
+.w-rich-editor .image-wrapper:hover .image-caption:empty {
+  color: #9ca3af;
+}

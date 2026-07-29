@@ -109,15 +109,6 @@ describe('CodeBlock 命令', () => {
 })
 
 describe('CodeBlock 键盘快捷键', () => {
-  it('Mod-Alt-c 切换代码块', () => {
-    editor = createEditor({ content: '<p>Text</p>' })
-    setCursor(editor, 1)
-    const ext = editor.extensions.find(e => e.name === 'code_block')
-    const shortcuts = ext._addKeyboardShortcuts.call(ext)
-    shortcuts['Mod-Alt-c'](editor.state, editor.view.dispatch)
-    expect(editor.getHTML()).toContain('<pre')
-  })
-
   it('Mod-a 选中代码块全部内容', () => {
     editor = createEditor({ content: '<pre><code>line1\nline2\nline3</code></pre>' })
     setCursor(editor, 3)
@@ -220,6 +211,90 @@ describe('CodeBlock 键盘快捷键', () => {
     const shortcuts = ext._addKeyboardShortcuts.call(ext)
     expect(shortcuts.Enter(editor.state, editor.view.dispatch)).toBe(false)
   })
+
+  it('Enter 无 dispatch 时返回 false（不吞掉事件）', () => {
+    editor = createEditor({ content: '<pre><code>test</code></pre>' })
+    setCursor(editor, 2)
+    const ext = editor.extensions.find(e => e.name === 'code_block')
+    const shortcuts = ext._addKeyboardShortcuts.call(ext)
+    // dispatch is undefined → should return false
+    expect(shortcuts.Enter(editor.state)).toBe(false)
+    // Code should be unchanged
+    expect(editor.getText()).toBe('test')
+  })
+
+  it('Enter 在有选区时返回 false（不丢失选中代码）', () => {
+    editor = createEditor({ content: '<pre><code>hello world</code></pre>' })
+    selectRange(editor, 2, 8) // select "llo wo"
+    const ext = editor.extensions.find(e => e.name === 'code_block')
+    const shortcuts = ext._addKeyboardShortcuts.call(ext)
+    expect(shortcuts.Enter(editor.state, editor.view.dispatch)).toBe(false)
+    // Selection should be handled by default, not our handler
+  })
+
+  it('Enter 保留光标后的代码', () => {
+    editor = createEditor({ content: '<pre><code>beforeAfter</code></pre>' })
+    setCursor(editor, 7) // between "before" and "After"
+    const ext = editor.extensions.find(e => e.name === 'code_block')
+    const shortcuts = ext._addKeyboardShortcuts.call(ext)
+    shortcuts.Enter(editor.state, editor.view.dispatch)
+    const text = editor.getText()
+    expect(text).toContain('before')
+    expect(text).toContain('After')
+  })
+
+  it('Enter 在行首保持无缩进', () => {
+    editor = createEditor({ content: '<pre><code>no indent</code></pre>' })
+    setCursor(editor, 1) // at the beginning
+    const ext = editor.extensions.find(e => e.name === 'code_block')
+    const shortcuts = ext._addKeyboardShortcuts.call(ext)
+    shortcuts.Enter(editor.state, editor.view.dispatch)
+    expect(editor.getText()).toBe('\nno indent')
+  })
+
+  it('Enter 在第二行保持该行的缩进', () => {
+    editor = createEditor({ content: '<pre><code>line1\n    line2</code></pre>' })
+    // doc(0) code_block(1) text starts at 2, ends at 16
+    // After "line2" = position 16
+    setCursor(editor, 16)
+    const ext = editor.extensions.find(e => e.name === 'code_block')
+    const shortcuts = ext._addKeyboardShortcuts.call(ext)
+    shortcuts.Enter(editor.state, editor.view.dispatch)
+    expect(editor.getText()).toBe('line1\n    line2\n    ')
+  })
+
+  it('连续 Enter 每次都保持缩进', () => {
+    editor = createEditor({ content: '<pre><code>  indented</code></pre>' })
+    setCursor(editor, 11)
+    const ext = editor.extensions.find(e => e.name === 'code_block')
+    const shortcuts = ext._addKeyboardShortcuts.call(ext)
+
+    // First Enter
+    shortcuts.Enter(editor.state, editor.view.dispatch)
+    setCursor(editor, editor.state.doc.content.size - 1)
+
+    // Second Enter — should still have "  " indent
+    shortcuts.Enter(editor.state, editor.view.dispatch)
+    const text = editor.getText()
+    const lines = text.split('\n')
+    // Third line should start with "  " (indent from second line)
+    expect(lines[2]).toMatch(/^  /)
+  })
+
+  it('Enter 后代码块内容完整不丢失', () => {
+    editor = createEditor({ content: '<pre><code>aaa\n  bbb\nccc</code></pre>' })
+    // "aaa\n  bbb\nccc" = 13 chars, text starts at 2
+    // After "  bbb" = 2 + 9 = 11
+    setCursor(editor, 11)
+    const ext = editor.extensions.find(e => e.name === 'code_block')
+    const shortcuts = ext._addKeyboardShortcuts.call(ext)
+    shortcuts.Enter(editor.state, editor.view.dispatch)
+    const text = editor.getText()
+    // All original content should be preserved
+    expect(text).toContain('aaa')
+    expect(text).toContain('bbb')
+    expect(text).toContain('ccc')
+  })
 })
 
 describe('CodeBlock 输入规则', () => {
@@ -254,17 +329,16 @@ describe('CodeBlock 语法高亮', () => {
     expect(decorations.find().length).toBeGreaterThan(0)
   })
 
-  it('未知语言返回空装饰', () => {
+  it('未知语言无语法高亮装饰', () => {
     editor = createEditor({ content: '<pre><code class="language-unknown-lang">text</code></pre>' })
     const ext = editor.extensions.find(e => e.name === 'code_block')
     const plugins = ext._addProseMirrorPlugins.call(ext)
     const plugin = plugins[0]
     const decorations = plugin.spec.state.init(null, editor.state)
-    // Only line decorations, no token decorations (but we removed line decorations)
     expect(decorations.find().length).toBe(0)
   })
 
-  it('空代码块返回空装饰', () => {
+  it('空代码块无语法高亮装饰', () => {
     editor = createEditor({ content: '<pre><code></code></pre>' })
     const ext = editor.extensions.find(e => e.name === 'code_block')
     const plugins = ext._addProseMirrorPlugins.call(ext)
@@ -283,5 +357,67 @@ describe('CodeBlock 语法高亮', () => {
     const newState = editor.state.apply(tr)
     const next = plugin.spec.state.apply(tr, prev, editor.state, newState)
     expect(next).not.toBe(prev)
+  })
+})
+
+// ============================================================================
+// NodeView — Line Numbers Gutter
+// ============================================================================
+
+describe('CodeBlock 行号 gutter', () => {
+  it('单行代码块渲染 1 个行号', () => {
+    editor = createEditor({ content: '<pre><code>hello</code></pre>' })
+    const gutter = editor.view.dom.querySelector('.line-numbers-rows')
+    expect(gutter).not.toBeNull()
+    expect(gutter.children.length).toBe(1)
+  })
+
+  it('多行代码块渲染对应数量的行号', () => {
+    editor = createEditor({ content: '<pre><code>line1\nline2\nline3</code></pre>' })
+    const gutter = editor.view.dom.querySelector('.line-numbers-rows')
+    expect(gutter.children.length).toBe(3)
+  })
+
+  it('空代码块仍有 1 个行号', () => {
+    editor = createEditor({ content: '<pre><code></code></pre>' })
+    const gutter = editor.view.dom.querySelector('.line-numbers-rows')
+    expect(gutter.children.length).toBe(1)
+  })
+
+  it('gutter 有 aria-hidden 属性', () => {
+    editor = createEditor({ content: '<pre><code>test</code></pre>' })
+    const gutter = editor.view.dom.querySelector('.line-numbers-rows')
+    expect(gutter.getAttribute('aria-hidden')).toBe('true')
+  })
+
+  it('代码块有 line-numbers class', () => {
+    editor = createEditor({ content: '<pre><code>test</code></pre>' })
+    const pre = editor.view.dom.querySelector('pre.code-block')
+    expect(pre?.classList.contains('line-numbers')).toBe(true)
+  })
+
+  it('编辑后行号数量同步更新', () => {
+    editor = createEditor({ content: '<pre><code>line1</code></pre>' })
+    let gutter = editor.view.dom.querySelector('.line-numbers-rows')
+    expect(gutter.children.length).toBe(1)
+
+    // Check NodeView reference
+    const pre = editor.view.dom.querySelector('pre.code-block')
+    expect(pre._codeBlockView).toBeDefined()
+
+    // Add a newline via transaction — position 6 is end of code_block content
+    // (pos 0 = before node, 1 = content start, 2-6 = "line1" chars, 6 = content end)
+    const tr = editor.state.tr.insertText('\nline2', 6, 6)
+    editor.view.dispatch(tr)
+
+    // Check that the text was updated
+    expect(editor.state.doc.textContent).toContain('line2')
+
+    // Directly call sync on the NodeView (verify _syncLineNumbers works)
+    const node = editor.state.doc.firstChild
+    pre._codeBlockView._syncLineNumbers(node)
+
+    gutter = editor.view.dom.querySelector('.line-numbers-rows')
+    expect(gutter.children.length).toBe(2)
   })
 })

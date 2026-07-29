@@ -19,3 +19,7 @@ export { Code } from './extensions/Code.js'
 // Features
 export { History } from './extensions/History.js'
 export { DropCursorExt } from './extensions/DropCursor.js'
+export { TextAlign } from './extensions/TextAlign.js'
+export { MarkdownPaste } from './extensions/MarkdownPaste.js'
+export { Image } from './extensions/Image.js'
+export { ImageUpload } from './extensions/ImageUpload.js'

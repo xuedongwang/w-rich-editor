@@ -14,6 +14,7 @@ function buildResolved(config, options, type, extraSpec) {
     _addKeyboardShortcuts: config.addKeyboardShortcuts || undefined,
     _addInputRules: config.addInputRules || undefined,
     _addProseMirrorPlugins: config.addProseMirrorPlugins || undefined,
+    _addNodeViews: config.addNodeViews || undefined,
 
     // Lifecycle hooks
     _onCreate: config.onCreate || undefined,

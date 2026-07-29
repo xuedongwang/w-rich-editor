@@ -38,29 +38,45 @@ import 'prismjs/components/prism-docker'
 import 'prismjs/components/prism-nginx'
 import 'prismjs/components/prism-diff'
 import 'prismjs/components/prism-regex'
-import 'prismjs/components/prism-lua'
-import 'prismjs/components/prism-haskell'
-import 'prismjs/components/prism-elixir'
-import 'prismjs/components/prism-erlang'
-import 'prismjs/components/prism-clojure'
-import 'prismjs/components/prism-scala'
-import 'prismjs/components/prism-dart'
 
-// Language aliases for convenience (e.g., "js" → "javascript")
-const LANG_ALIASES = {
-  js: 'javascript', ts: 'typescript', py: 'python', rb: 'ruby',
-  sh: 'bash', shell: 'bash', yml: 'yaml', md: 'markdown',
-  cs: 'csharp', 'c++': 'cpp', 'c#': 'csharp',
-  html: 'markup', xml: 'markup', svg: 'markup',
-  dockerfile: 'docker',
-}
-
+/**
+ * Resolve language identifier to a Prism grammar key.
+ * Supports common aliases.
+ */
 function resolveLanguage(lang) {
-  if (!lang) return null
-  const key = lang.toLowerCase()
-  const resolved = LANG_ALIASES[key] || key
-  return Prism.languages[resolved] ? resolved : null
+  if (!lang) return ''
+  const aliases = {
+    js: 'javascript', ts: 'typescript', py: 'python',
+    rb: 'ruby', rs: 'rust', sh: 'bash', yml: 'yaml',
+    md: 'markdown', html: 'markup', xml: 'markup',
+    svg: 'markup', cpp: 'cpp', c: 'c',
+    'c++': 'cpp', 'c#': 'csharp', cs: 'csharp',
+    dockerfile: 'docker', shell: 'bash',
+  }
+  const resolved = aliases[lang.toLowerCase()] || lang.toLowerCase()
+  return Prism.languages[resolved] ? resolved : ''
 }
+
+// ============================================================================
+// Sync gutter DOM elements (called via rAF after each state change)
+// ============================================================================
+
+function syncGutters(view) {
+  const pres = view.dom.querySelectorAll('pre.code-block')
+  if (!pres.length) return
+
+  let docIdx = 0
+  view.state.doc.descendants(node => {
+    if (node.type.name !== 'code_block') return
+    const pre = pres[docIdx++]
+    if (!pre || !pre._codeBlockView) return
+    pre._codeBlockView._syncLineNumbers(node)
+  })
+}
+
+// ============================================================================
+// Syntax highlighting decorations
+// ============================================================================
 
 const codeBlockHighlightKey = new PluginKey('codeBlockHighlight')
 
@@ -71,43 +87,204 @@ function buildDecorations(state) {
 
   state.doc.descendants((node, pos) => {
     if (node.type !== codeBlockType) return
-    const lang = resolveLanguage(node.attrs.language)
-    if (!lang) return
-
-    const text = node.textContent
-    if (!text) return
 
     const contentStart = pos + 1
+    const text = node.textContent
 
-    // Syntax highlighting token decorations
-    const tokens = Prism.tokenize(text, Prism.languages[lang])
+    // Syntax highlighting only — line numbers handled by NodeView gutter
+    if (text) {
+      const lang = resolveLanguage(node.attrs.language)
+      if (lang && Prism.languages[lang]) {
+        const tokens = Prism.tokenize(text, Prism.languages[lang])
 
-    function walk(tokens, textOffset) {
-      let cursor = textOffset
-      for (const token of tokens) {
-        if (typeof token === 'string') {
-          cursor += token.length
-        } else {
-          const tokenText = typeof token.content === 'string'
-            ? token.content
-            : token.content.join('')
-          const from = contentStart + cursor
-          const to = from + tokenText.length
-          decorations.push(Decoration.inline(from, to, { class: `token ${token.type}` }))
-          cursor += tokenText.length
-          if (Array.isArray(token.content)) {
-            walk(token.content, cursor - tokenText.length)
+        function walk(tokens, textOffset) {
+          let cursor = textOffset
+          for (const token of tokens) {
+            if (typeof token === 'string') {
+              cursor += token.length
+            } else {
+              const tokenText = typeof token.content === 'string'
+                ? token.content
+                : token.content.join('')
+              const from = contentStart + cursor
+              const to = from + tokenText.length
+              decorations.push(Decoration.inline(from, to, { class: `token ${token.type}` }))
+              cursor += tokenText.length
+              if (Array.isArray(token.content)) {
+                walk(token.content, cursor - tokenText.length)
+              }
+            }
           }
+          return cursor
         }
-      }
-      return cursor
-    }
 
-    walk(tokens, 0)
+        walk(tokens, 0)
+      }
+    }
   })
 
   return DecorationSet.create(state.doc, decorations)
 }
+
+// ============================================================================
+// Language display names
+// ============================================================================
+
+const LANGUAGE_NAMES = {
+  javascript: 'JavaScript', typescript: 'TypeScript', jsx: 'JSX', tsx: 'TSX',
+  css: 'CSS', scss: 'SCSS', less: 'Less',
+  html: 'HTML', xml: 'XML', svg: 'SVG',
+  json: 'JSON', python: 'Python', java: 'Java',
+  c: 'C', cpp: 'C++', csharp: 'C#', go: 'Go',
+  rust: 'Rust', ruby: 'Ruby', php: 'PHP',
+  swift: 'Swift', kotlin: 'Kotlin', bash: 'Bash',
+  yaml: 'YAML', toml: 'TOML', markdown: 'Markdown',
+  sql: 'SQL', graphql: 'GraphQL', docker: 'Docker',
+  nginx: 'Nginx', diff: 'Diff', regex: 'Regex',
+}
+
+function getLanguageLabel(lang) {
+  if (!lang) return 'Plain Text'
+  return LANGUAGE_NAMES[lang.toLowerCase()] || lang
+}
+
+// ============================================================================
+// NodeView — Copy button + language label
+// ============================================================================
+
+class CodeBlockView {
+  constructor(node, view, getPos) {
+    this.node = node
+    this.view = view
+    this.getPos = getPos
+
+    // Outer wrapper
+    this.wrapper = document.createElement('div')
+    this.wrapper.className = 'code-block-wrapper'
+
+    // Language header bar (contains label + copy button)
+    this.header = document.createElement('div')
+    this.header.className = 'code-lang-label'
+
+    // Language text label
+    this.langText = document.createElement('span')
+    this.langText.className = 'code-lang-text'
+
+    // Copy button (inside header)
+    this.copyBtn = document.createElement('button')
+    this.copyBtn.className = 'code-copy-btn'
+    this.copyBtn.type = 'button'
+    this.copyBtn.title = '复制代码'
+    this.copyBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>'
+
+    this.copyBtn.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      this._copyCode()
+    })
+
+    this.header.append(this.langText, this.copyBtn)
+
+    // Content area — ProseMirror manages this element
+    this.pre = document.createElement('pre')
+    this.pre.className = 'code-block line-numbers'
+    this.pre.spellcheck = false
+
+    // Line numbers gutter (PrismJS style — separate from editable content)
+    this.lineNumbersRows = document.createElement('span')
+    this.lineNumbersRows.className = 'line-numbers-rows'
+    this.lineNumbersRows.setAttribute('aria-hidden', 'true')
+
+    this.code = document.createElement('code')
+    this.code.className = node.attrs.language ? `language-${node.attrs.language}` : ''
+    this.code.spellcheck = false
+    this.pre.append(this.lineNumbersRows, this.code)
+
+    // contentDOM must be <code>, not <pre>, so ProseMirror doesn't clear the gutter
+    this.contentDOM = this.code
+    this.pre._codeBlockView = this
+    this.wrapper.append(this.header, this.pre)
+    this.dom = this.wrapper
+
+    this._syncLabel(node)
+    this._syncLineNumbers(node)
+  }
+
+  _syncLabel(node) {
+    const lang = node.attrs.language || ''
+    this.langText.textContent = getLanguageLabel(lang)
+  }
+
+  _syncLineNumbers(node) {
+    const text = node.textContent
+    const lineCount = text ? (text.match(/\n/g) || []).length + 1 : 1
+    const currentCount = this.lineNumbersRows.children.length
+
+    if (currentCount !== lineCount) {
+      this.lineNumbersRows.innerHTML = ''
+      for (let i = 0; i < lineCount; i++) {
+        this.lineNumbersRows.appendChild(document.createElement('span'))
+      }
+    }
+
+    // Support custom start line
+    const lineStart = node.attrs.lineStart || 1
+    if (lineStart !== 1) {
+      this.pre.style.counterReset = `linenumber ${lineStart - 1}`
+    } else {
+      this.pre.style.counterReset = ''
+    }
+  }
+
+  async _copyCode() {
+    const text = this.node.textContent
+    try {
+      await navigator.clipboard.writeText(text)
+      this.copyBtn.classList.add('copied')
+      setTimeout(() => this.copyBtn.classList.remove('copied'), 1500)
+    } catch {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      this.copyBtn.classList.add('copied')
+      setTimeout(() => this.copyBtn.classList.remove('copied'), 1500)
+    }
+  }
+
+  update(node) {
+    if (node.type !== this.node.type) return false
+    const contentChanged = node.textContent !== this.node.textContent
+    const attrsChanged = node.attrs.language !== this.node.attrs.language ||
+                         node.attrs.lineStart !== this.node.lineStart
+    this.node = node
+    this.code.className = node.attrs.language ? `language-${node.attrs.language}` : ''
+    this._syncLabel(node)
+    if (contentChanged || attrsChanged) {
+      this._syncLineNumbers(node)
+    }
+    return true
+  }
+
+  stopEvent(e) {
+    if (this.copyBtn.contains(e.target)) return true
+    if (this.header.contains(e.target)) return true
+    return false
+  }
+
+  ignoreMutation() { return true }
+  destroy() {
+    if (this.pre) this.pre._codeBlockView = null
+  }
+}
+
+// ============================================================================
+// Extension
+// ============================================================================
 
 export const CodeBlock = NodeExtension.create({
   name: 'code_block',
@@ -116,10 +293,21 @@ export const CodeBlock = NodeExtension.create({
   marks: '',
   defining: true,
   code: true,
-  attrs: { language: { default: '' } },
+  attrs: {
+    language: { default: '' },
+    lineStart: { default: 1 },     // Starting line number (data-start equivalent)
+  },
   toDOM(node) {
-    return ['pre', { class: 'code-block', spellcheck: 'false' },
-      ['code', { class: node.attrs.language ? `language-${node.attrs.language}` : '', spellcheck: 'false' }, 0]]
+    return ['pre', {
+      class: 'code-block',
+      spellcheck: 'false',
+      'data-start': node.attrs.lineStart !== 1 ? node.attrs.lineStart : undefined,
+    },
+      ['code', {
+        class: node.attrs.language ? `language-${node.attrs.language}` : '',
+        spellcheck: 'false',
+      }, 0],
+    ]
   },
   parseDOM: [{
     tag: 'pre',
@@ -128,7 +316,8 @@ export const CodeBlock = NodeExtension.create({
       const code = dom.querySelector('code')
       const langClass = code?.className || ''
       const match = langClass.match(/language-(\S+)/)
-      return { language: match ? match[1] : '' }
+      const lineStart = parseInt(dom.getAttribute('data-start'), 10) || 1
+      return { language: match ? match[1] : '', lineStart }
     },
   }],
 
@@ -158,6 +347,17 @@ export const CodeBlock = NodeExtension.create({
         }
         return true
       },
+      setCodeBlockLineStart: (pos, lineStart) => (state, dispatch) => {
+        const node = state.doc.nodeAt(pos)
+        if (!node || node.type.name !== 'code_block') return false
+        if (dispatch) {
+          dispatch(state.tr.setNodeMarkup(pos, null, {
+            ...node.attrs,
+            lineStart: Math.max(1, Math.round(lineStart)),
+          }))
+        }
+        return true
+      },
     }
   },
 
@@ -167,40 +367,22 @@ export const CodeBlock = NodeExtension.create({
         const codeBlockType = state.schema.nodes.code_block
         if (!codeBlockType) return false
         const { $from } = state.selection
-        // Not in a code block → fall through to default select-all
         if ($from.parent.type !== codeBlockType) return false
 
-        // Calculate code block content range
         const before = $from.before()
         const after = $from.after()
         const contentFrom = before + 1
         const contentTo = after - 1
 
-        // If code block is empty, nothing to select
         if (contentFrom >= contentTo) return true
 
-        // If the selection already covers the whole code block content,
-        // fall through to default behavior (select entire document)
         const { from, to } = state.selection
         if (from === contentFrom && to === contentTo) return false
 
-        // Select all content within this code block
         if (dispatch) {
           dispatch(state.tr.setSelection(
             TextSelection.create(state.doc, contentFrom, contentTo)
           ))
-        }
-        return true
-      },
-
-      'Mod-Alt-c': (state, dispatch) => {
-        const { code_block, paragraph } = state.schema.nodes
-        if (!code_block) return false
-        const { $from } = state.selection
-        if ($from.parent.type === code_block) {
-          if (dispatch) dispatch(state.tr.setNodeMarkup($from.before(), paragraph))
-        } else {
-          if (dispatch) dispatch(state.tr.setNodeMarkup($from.before(), code_block, { language: '' }))
         }
         return true
       },
@@ -285,19 +467,21 @@ export const CodeBlock = NodeExtension.create({
         return true
       },
 
-      // Smart Enter: preserve indentation of current line
+      // Smart Enter: insert newline and preserve indentation of current line.
+      // Only handles collapsed cursor — non-empty selection falls through to default.
       Enter: (state, dispatch) => {
-        const { $from } = state.selection
+        if (!dispatch) return false
+        const { $from, empty } = state.selection
         if ($from.parent.type.name !== 'code_block') return false
+        if (!empty) return false  // let default behavior handle selection replacement
+
         const offsetInBlock = $from.parentOffset
         const blockText = $from.parent.textContent
         const textBefore = blockText.slice(0, offsetInBlock)
         const lastNewline = textBefore.lastIndexOf('\n')
         const lineText = textBefore.slice(lastNewline + 1)
         const indent = lineText.match(/^\s*/)[0]
-        if (dispatch) {
-          dispatch(state.tr.replaceSelectionWith(state.schema.text('\n' + indent)))
-        }
+        dispatch(state.tr.insertText('\n' + indent))
         return true
       },
     }
@@ -307,8 +491,17 @@ export const CodeBlock = NodeExtension.create({
     return [new InputRule(/^```$/, (state, match, start, end) => {
       const matchStart = start - match[0].length
       const codeBlock = state.schema.nodes.code_block.create({ language: '' })
-      return state.tr.replaceWith(matchStart, end, codeBlock)
+      const tr = state.tr.replaceWith(matchStart, end, codeBlock)
+      const blockPos = tr.doc.resolve(matchStart + 1)
+      tr.setSelection(TextSelection.near(blockPos))
+      return tr
     })]
+  },
+
+  addNodeViews() {
+    return {
+      code_block: (node, view, getPos) => new CodeBlockView(node, view, getPos),
+    }
   },
 
   addProseMirrorPlugins() {
@@ -328,6 +521,59 @@ export const CodeBlock = NodeExtension.create({
           decorations(state) {
             return this.getState(state)
           },
+          // Click on line number gutter → select entire line
+          handleClick(view, pos, event) {
+            // Check if click is inside a line-numbers-rows gutter
+            const gutter = event.target?.closest?.('.line-numbers-rows')
+            if (!gutter) return false
+
+            // Find the code block containing this click position
+            let cbPos = null
+            let cbNode = null
+            view.state.doc.descendants((node, p) => {
+              if (cbPos != null) return false
+              if (node.type.name === 'code_block') {
+                const from = p + 1
+                const to = p + node.nodeSize - 1
+                if (pos >= p && pos <= p + node.nodeSize) {
+                  cbPos = from
+                  cbNode = node
+                }
+              }
+            })
+
+            if (!cbPos || !cbNode) return false
+
+            const text = cbNode.textContent
+            // Map click position to offset within the text content
+            const offset = Math.max(0, Math.min(pos - cbPos, text.length))
+
+            // Find the line boundaries
+            const lineStart = text.lastIndexOf('\n', offset - 1) + 1
+            const lineEndIdx = text.indexOf('\n', offset)
+            const lineEnd = lineEndIdx === -1 ? text.length : lineEndIdx
+
+            const from = cbPos + lineStart
+            const to = cbPos + lineEnd
+
+            if (from >= to) return true
+
+            view.dispatch(
+              view.state.tr.setSelection(TextSelection.create(view.state.doc, from, to))
+            )
+            return true
+          },
+        },
+      }),
+      // Gutter sync plugin — updates line number gutter after every state change
+      new Plugin({
+        key: new PluginKey('codeBlockGutterSync'),
+        view() {
+          return {
+            update(editorView) {
+              syncGutters(editorView)
+            },
+          }
         },
       }),
     ]

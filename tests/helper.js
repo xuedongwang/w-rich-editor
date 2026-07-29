@@ -5,7 +5,7 @@ import {
   BulletList, OrderedList, ListItem,
   Blockquote, CodeBlock, Divider,
   Bold, Italic, Code,
-  History, DropCursorExt,
+  History, DropCursorExt, TextAlign, MarkdownPaste, Image,
 } from '../src/editor/index.js'
 
 export const DEFAULT_EXTENSIONS = [
@@ -23,6 +23,9 @@ export const DEFAULT_EXTENSIONS = [
   Code.resolve(),
   History.resolve(),
   DropCursorExt.resolve(),
+  TextAlign.resolve(),
+  MarkdownPaste.resolve(),
+  Image.resolve(),
 ]
 
 export function createEditor(opts = {}) {

@@ -29,15 +29,35 @@ describe('Heading 扩展 — 节点定义', () => {
     expect(Heading.resolve().nodeSpec.attrs.level.default).toBe(1)
   })
 
+  it('align 属性默认值为 null', () => {
+    expect(Heading.resolve().nodeSpec.attrs.align.default).toBeNull()
+  })
+
   it.each([1, 2, 3, 4, 5, 6])('渲染为 h%d 元素', (level) => {
-    const dom = Heading.resolve().nodeSpec.toDOM({ attrs: { level } })
+    const dom = Heading.resolve().nodeSpec.toDOM({ attrs: { level, align: null } })
     expect(dom[0]).toBe(`h${level}`)
+  })
+
+  it('渲染为带对齐样式的 h2 元素', () => {
+    const dom = Heading.resolve().nodeSpec.toDOM({ attrs: { level: 2, align: 'center' } })
+    expect(dom[0]).toBe('h2')
+    expect(dom[1].style).toBe('text-align: center')
   })
 
   it.each([1, 2, 3, 4, 5, 6])('解析 h%d 元素', (level) => {
     const parseRule = Heading.resolve().nodeSpec.parseDOM[level - 1]
     expect(parseRule.tag).toBe(`h${level}`)
-    expect(parseRule.attrs.level).toBe(level)
+    // getAttrs returns level; with text-align also returns align
+    expect(parseRule.getAttrs({ style: { textAlign: '' } })).toEqual({ level })
+    expect(parseRule.getAttrs({ style: { textAlign: 'center' } })).toEqual({ level, align: 'center' })
+  })
+
+  it('通过 getAttrs 解析 text-align 样式', () => {
+    const rule = Heading.resolve().nodeSpec.parseDOM[0]
+    expect(rule.tag).toBe('h1')
+    expect(rule.getAttrs({ style: { textAlign: 'right' } })).toEqual({ level: 1, align: 'right' })
+    expect(rule.getAttrs({ style: { textAlign: '' } })).toEqual({ level: 1 })
+    expect(rule.getAttrs({})).toEqual({ level: 1 })
   })
 })
 
@@ -57,7 +77,7 @@ describe('Heading 扩展 — 命令', () => {
     expect(editor.getHTML()).toContain('<p>')
   })
 
-  it.each([1, 2, 3])('toggleHeading 创建 h%d', (level) => {
+  it.each([1, 2, 3, 4, 5, 6])('toggleHeading 创建 h%d', (level) => {
     editor = createEditor({ content: '<p>Test</p>' })
     setCursor(editor, 1)
     editor.commands.toggleHeading({ level })
@@ -66,42 +86,25 @@ describe('Heading 扩展 — 命令', () => {
 })
 
 describe('Heading 扩展 — 快捷键', () => {
-  it('Mod-Alt-1 创建 H1', () => {
+  it.each([1, 2, 3, 4, 5, 6])('Mod-Alt-%d 创建 H%d', (level) => {
     editor = createEditor({ content: '<p>Test</p>' })
     setCursor(editor, 1)
     const ext = editor.extensions.find(e => e.name === 'heading')
     const shortcuts = ext._addKeyboardShortcuts.call(ext)
-    shortcuts['Mod-Alt-1'](editor.state, editor.view.dispatch)
-    expect(editor.getHTML()).toContain('<h1>')
-  })
-
-  it('Mod-Alt-2 创建 H2', () => {
-    editor = createEditor({ content: '<p>Test</p>' })
-    setCursor(editor, 1)
-    const ext = editor.extensions.find(e => e.name === 'heading')
-    const shortcuts = ext._addKeyboardShortcuts.call(ext)
-    shortcuts['Mod-Alt-2'](editor.state, editor.view.dispatch)
-    expect(editor.getHTML()).toContain('<h2>')
-  })
-
-  it('Mod-Alt-3 创建 H3', () => {
-    editor = createEditor({ content: '<p>Test</p>' })
-    setCursor(editor, 1)
-    const ext = editor.extensions.find(e => e.name === 'heading')
-    const shortcuts = ext._addKeyboardShortcuts.call(ext)
-    shortcuts['Mod-Alt-3'](editor.state, editor.view.dispatch)
-    expect(editor.getHTML()).toContain('<h3>')
+    shortcuts[`Mod-Alt-${level}`](editor.state, editor.view.dispatch)
+    expect(editor.getHTML()).toContain(`<h${level}>`)
   })
 })
 
 describe('Heading 扩展 — 输入规则', () => {
-  it('提供 3 条输入规则', () => {
+  it('提供 6 条输入规则', () => {
     editor = createEditor()
     const ext = editor.extensions.find(e => e.name === 'heading')
-    expect(ext._addInputRules.call(ext)).toHaveLength(3)
+    expect(ext._addInputRules.call(ext)).toHaveLength(6)
   })
 
-  it.each([['# ', 1], ['## ', 2], ['### ', 3]])('匹配模式 %s', (pattern, level) => {
+  it.each([1, 2, 3, 4, 5, 6])('匹配模式 %s', (level) => {
+    const pattern = `${'#'.repeat(level)} `
     const regex = new RegExp(`^${'#'.repeat(level)}\\s$`)
     expect(regex.test(pattern)).toBe(true)
   })

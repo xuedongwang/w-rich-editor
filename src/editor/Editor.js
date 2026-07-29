@@ -126,6 +126,7 @@ export class Editor {
 
   createView() {
     const plugins = this.collectPlugins()
+    const nodeViews = this.collectNodeViews()
 
     let doc = undefined
     if (this.options.content) {
@@ -144,7 +145,7 @@ export class Editor {
       plugins,
     })
 
-    this.view = new EditorView(this.options.target, {
+    const viewProps = {
       state: this.state,
       editable: () => this.options.editable !== false,
       dispatchTransaction: (tr) => {
@@ -154,7 +155,24 @@ export class Editor {
         if (tr.docChanged) this.fireLifecycle('onUpdate')
         if (tr.selectionSet) this.fireLifecycle('onSelectionUpdate')
       },
-    })
+    }
+
+    if (Object.keys(nodeViews).length > 0) {
+      viewProps.nodeViews = nodeViews
+    }
+
+    this.view = new EditorView(this.options.target, viewProps)
+
+    // Apply CSS class names to the editor DOM
+    this.view.dom.classList.add('w-rich-editor')
+    if (this.options.classNames) {
+      const extra = this.options.classNames
+      if (typeof extra === 'string') {
+        extra.split(/\s+/).filter(Boolean).forEach(c => this.view.dom.classList.add(c))
+      } else if (Array.isArray(extra)) {
+        extra.forEach(c => this.view.dom.classList.add(c))
+      }
+    }
   }
 
   collectPlugins() {
@@ -188,6 +206,17 @@ export class Editor {
     plugins.push(keymap(baseKeymap))
 
     return plugins
+  }
+
+  collectNodeViews() {
+    const nodeViews = {}
+    for (const ext of this.extensions) {
+      if (ext._addNodeViews) {
+        const views = ext._addNodeViews.call(ext)
+        Object.assign(nodeViews, views)
+      }
+    }
+    return nodeViews
   }
 
   // ========================================================================

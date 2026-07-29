@@ -1,0 +1,293 @@
+/* ============================================================================
+   Content Styles — 业务内容显示样式（标题/列表/引用/代码/分隔线等）
+   用户可通过自定义 CSS 类覆盖这些默认样式
+   ========================================================================= */
+
+/* Paragraph */
+.w-rich-editor p {
+  margin: 0 0 0.8em;
+}
+.w-rich-editor p:last-child {
+  margin-bottom: 0;
+}
+
+/* Headings */
+.w-rich-editor h1,
+.w-rich-editor h2,
+.w-rich-editor h3,
+.w-rich-editor h4,
+.w-rich-editor h5,
+.w-rich-editor h6 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 1.4em 0 0.5em;
+  color: #111827;
+}
+.w-rich-editor h1 { font-size: 2em; }
+.w-rich-editor h2 { font-size: 1.5em; }
+.w-rich-editor h3 { font-size: 1.25em; }
+.w-rich-editor h4 { font-size: 1.1em; }
+.w-rich-editor h5 { font-size: 1em; }
+.w-rich-editor h6 { font-size: 0.9em; color: #4b5563; }
+.w-rich-editor h1:first-child,
+.w-rich-editor h2:first-child,
+.w-rich-editor h3:first-child {
+  margin-top: 0;
+}
+
+/* Unordered List */
+.w-rich-editor ul {
+  list-style: disc;
+  padding-left: 1.6em;
+  margin: 0.5em 0;
+}
+.w-rich-editor ul ul {
+  list-style-type: circle;
+}
+.w-rich-editor ul ul ul {
+  list-style-type: square;
+}
+
+/* Ordered List */
+.w-rich-editor ol {
+  list-style: decimal;
+  padding-left: 1.6em;
+  margin: 0.5em 0;
+}
+.w-rich-editor ol ol {
+  list-style-type: lower-alpha;
+}
+.w-rich-editor ol ol ol {
+  list-style-type: lower-roman;
+}
+
+/* List items */
+.w-rich-editor li {
+  margin: 0.25em 0;
+  padding-left: 0.2em;
+}
+.w-rich-editor li > p {
+  margin: 0;
+}
+.w-rich-editor li::marker {
+  color: #9ca3af;
+}
+
+/* Blockquote */
+.w-rich-editor blockquote {
+  border-left: 3px solid #6366f1;
+  margin: 1em 0;
+  padding: 0.5em 0 0.5em 1.2em;
+  color: #4b5563;
+  background: #f8fafc;
+  border-radius: 0 4px 4px 0;
+}
+.w-rich-editor blockquote p {
+  margin: 0.3em 0;
+}
+.w-rich-editor blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Divider */
+.w-rich-editor hr {
+  border: none;
+  border-top: 2px solid #e5e7eb;
+  margin: 2em 0;
+}
+
+/* Inline code */
+.w-rich-editor code {
+  background: #f1f5f9;
+  color: #be185d;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', Menlo, Consolas, monospace;
+  font-size: 0.88em;
+}
+
+/* Bold & Italic */
+.w-rich-editor strong { font-weight: 700; }
+.w-rich-editor em { font-style: italic; }
+
+/* Text alignment */
+.w-rich-editor [style*="text-align: center"] { text-align: center; }
+.w-rich-editor [style*="text-align: right"] { text-align: right; }
+.w-rich-editor [style*="text-align: justify"] { text-align: justify; }
+
+/* ============================================================================
+   Code Block — 基础渲染
+   ========================================================================= */
+
+.w-rich-editor pre.code-block {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  border-radius: 0 0 6px 6px;
+  padding: 16px 20px 16px 3.8em;
+  margin: 0;
+  overflow-x: auto;
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  tab-size: 2;
+  white-space: pre;
+  max-height: 500px;
+  counter-reset: linenumber;
+  position: relative;
+}
+
+.w-rich-editor pre.code-block code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+  font-size: inherit;
+  font-family: inherit;
+  position: relative;
+}
+
+/* Word wrap toggle */
+.w-rich-editor pre.code-block.word-wrap {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ============================================================================
+   Code Block — Line Numbers (PrismJS style)
+   ========================================================================= */
+
+.w-rich-editor pre.code-block .line-numbers-rows {
+  position: absolute;
+  pointer-events: none;
+  top: 16px;
+  left: 0;
+  font-size: 100%;
+  width: 3em;
+  letter-spacing: -1px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  user-select: none;
+}
+
+.w-rich-editor pre.code-block .line-numbers-rows > span {
+  display: block;
+  counter-increment: linenumber;
+}
+
+.w-rich-editor pre.code-block .line-numbers-rows > span::before {
+  content: counter(linenumber);
+  color: #6c7086;
+  display: block;
+  padding-right: 0.8em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================================
+   Code Block — Syntax Highlighting (Prism Catppuccin Mocha)
+   ========================================================================= */
+
+.w-rich-editor pre.code-block .token.comment,
+.w-rich-editor pre.code-block .token.prolog,
+.w-rich-editor pre.code-block .token.doctype,
+.w-rich-editor pre.code-block .token.cdata {
+  color: #6c7086;
+}
+.w-rich-editor pre.code-block .token.punctuation { color: #cdd6f4; }
+.w-rich-editor pre.code-block .token.property,
+.w-rich-editor pre.code-block .token.tag,
+.w-rich-editor pre.code-block .token.constant,
+.w-rich-editor pre.code-block .token.symbol,
+.w-rich-editor pre.code-block .token.deleted { color: #f38ba8; }
+.w-rich-editor pre.code-block .token.selector,
+.w-rich-editor pre.code-block .token.attr-name,
+.w-rich-editor pre.code-block .token.string,
+.w-rich-editor pre.code-block .token.char,
+.w-rich-editor pre.code-block .token.builtin,
+.w-rich-editor pre.code-block .token.inserted { color: #a6e3a1; }
+.w-rich-editor pre.code-block .token.operator,
+.w-rich-editor pre.code-block .token.entity,
+.w-rich-editor pre.code-block .token.url { color: #f9e2af; }
+.w-rich-editor pre.code-block .token.atrule,
+.w-rich-editor pre.code-block .token.attr-value,
+.w-rich-editor pre.code-block .token.keyword { color: #cba6f7; }
+.w-rich-editor pre.code-block .token.function,
+.w-rich-editor pre.code-block .token.class-name { color: #89b4fa; }
+.w-rich-editor pre.code-block .token.regex,
+.w-rich-editor pre.code-block .token.important,
+.w-rich-editor pre.code-block .token.variable { color: #fab387; }
+.w-rich-editor pre.code-block .token.number { color: #fab387; }
+.w-rich-editor pre.code-block .token.boolean { color: #fab387; }
+
+/* ============================================================================
+   Code Block — Wrapper, Language Label & Copy Button
+   ========================================================================= */
+
+.code-block-wrapper {
+  position: relative;
+  margin: 1em 0;
+  border-radius: 6px;
+  background: #1e1e2e;
+  overflow: hidden;
+}
+
+/* Language header bar */
+.code-block-wrapper .code-lang-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #a6adc8;
+  background: #181825;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  user-select: none;
+}
+
+/* Copy button positioned inside header */
+.code-block-wrapper .code-copy-btn {
+  position: static;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #a6adc8;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.code-block-wrapper .code-copy-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cdd6f4;
+}
+
+.code-block-wrapper .code-copy-btn.copied {
+  opacity: 1;
+  color: #a6e3a1;
+}
+
+.code-block-wrapper .code-copy-btn.copied::after {
+  content: '✓';
+  position: absolute;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.code-block-wrapper .code-copy-btn.copied svg {
+  opacity: 0;
+}
+
+/* Code area fills remaining space */
+.code-block-wrapper pre.code-block {
+  margin: 0;
+  border-radius: 0;
+  max-height: 500px;
+  overflow: auto;
+}
