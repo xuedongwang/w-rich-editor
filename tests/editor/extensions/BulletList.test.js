@@ -191,4 +191,60 @@ describe('列表输入规则', () => {
     expect(pattern.test('42. ')).toBe(true)
     expect(pattern.test('a. ')).toBe(false)
   })
+
+  it('创建无序列表后光标位于列表项段落内', () => {
+    editor = createEditor({ content: '<p>- </p>' })
+    setCursor(editor, 3)
+    const ext = editor.extensions.find(e => e.name === 'list_item')
+    const rules = ext._addInputRules.call(ext)
+    const rule = rules.find(r => /^(?:[-*+])\s$/.test('- '))
+    const tr = rule.handler(editor.state, ['- '], 1, 3)
+    editor.view.dispatch(tr)
+    // Cursor should be inside the list_item > paragraph, not after the list.
+    const { $from } = editor.state.selection
+    expect($from.parent.type.name).toBe('paragraph')
+    expect($from.node($from.depth - 1).type.name).toBe('list_item')
+    expect($from.node($from.depth - 2).type.name).toBe('bullet_list')
+  })
+
+  it('创建无序列表后光标位于列表项段落内', () => {
+    editor = createEditor({ content: '<p>- </p>' })
+    setCursor(editor, 3)
+    const ext = editor.extensions.find(e => e.name === 'list_item')
+    const rules = ext._addInputRules.call(ext)
+    const rule = rules.find(r => r.match.test('- '))
+    const tr = rule.handler(editor.state, ['- '], 1, 3)
+    editor.view.dispatch(tr)
+    // Cursor should be inside the list_item > paragraph, not after the list.
+    const { $from } = editor.state.selection
+    expect($from.parent.type.name).toBe('paragraph')
+    expect($from.node($from.depth - 1).type.name).toBe('list_item')
+    expect($from.node($from.depth - 2).type.name).toBe('bullet_list')
+  })
+
+  it('创建有序列表后光标位于列表项段落内', () => {
+    editor = createEditor({ content: '<p>1. </p>' })
+    setCursor(editor, 4)
+    const ext = editor.extensions.find(e => e.name === 'list_item')
+    const rules = ext._addInputRules.call(ext)
+    // Find the ordered list rule: matches "1. " but not "- "
+    const rule = rules.find(r => r.match.test('1. ') && !r.match.test('- '))
+    const tr = rule.handler(editor.state, ['1.', '1'], 1, 4)
+    editor.view.dispatch(tr)
+    const { $from } = editor.state.selection
+    expect($from.parent.type.name).toBe('paragraph')
+    expect($from.node($from.depth - 1).type.name).toBe('list_item')
+    expect($from.node($from.depth - 2).type.name).toBe('ordered_list')
+  })
+
+  it('在引用块内 - + 空格不创建列表', () => {
+    editor = createEditor({ content: '<blockquote><p>- </p></blockquote>' })
+    setCursor(editor, 4)
+    const ext = editor.extensions.find(e => e.name === 'list_item')
+    const rules = ext._addInputRules.call(ext)
+    const rule = rules.find(r => r.match.test('- '))
+    const result = rule.handler(editor.state, ['- '], 2, 4)
+    expect(result).toBeNull()
+    expect(editor.getHTML()).not.toContain('<ul')
+  })
 })

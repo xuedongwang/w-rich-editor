@@ -3,6 +3,7 @@ import { InputRule } from 'prosemirror-inputrules'
 import { TextSelection } from 'prosemirror-state'
 import { Decoration, DecorationSet } from 'prosemirror-view'
 import { Plugin, PluginKey } from 'prosemirror-state'
+import { convertBlockType } from '../utils/blockType.js'
 import Prism from 'prismjs'
 
 // Import common languages (total ~40KB gzipped)
@@ -335,11 +336,10 @@ export const CodeBlock = NodeExtension.create({
         if (!code_block || !paragraph) return false
         const { $from } = state.selection
         if ($from.parent.type === code_block) {
-          if (dispatch) dispatch(state.tr.setNodeMarkup($from.before(), paragraph))
+          return convertBlockType(paragraph, null, state, dispatch)
         } else {
-          if (dispatch) dispatch(state.tr.setNodeMarkup($from.before(), code_block, attrs || { language: '' }))
+          return convertBlockType(code_block, attrs || { language: '' }, state, dispatch)
         }
-        return true
       },
       setCodeBlockLanguage: (attrs) => (state, dispatch) => {
         const { code_block } = state.schema.nodes
@@ -501,7 +501,13 @@ export const CodeBlock = NodeExtension.create({
       // the lookbehind vs typed-text offset). We need to replace the
       // entire block that contains the match with a code_block.
       const $start = state.doc.resolve(start)
-      const codeBlock = state.schema.nodes.code_block.create({ language: '' })
+      const codeBlockType = state.schema.nodes.code_block
+      if (!codeBlockType) return null
+      // Inside a blockquote: don't recognize the markdown code-block syntax
+      for (let d = $start.depth; d > 0; d--) {
+        if ($start.node(d).type.name === 'blockquote') return null
+      }
+      const codeBlock = codeBlockType.create({ language: '' })
       const tr = state.tr.replaceWith($start.before(), $start.after(), codeBlock)
       const blockPos = tr.doc.resolve($start.before() + 1)
       tr.setSelection(TextSelection.near(blockPos))

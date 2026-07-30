@@ -1,6 +1,45 @@
 import { NodeExtension } from '../Extension.js'
 import { wrapInList, splitListItem, liftListItem, sinkListItem } from 'prosemirror-schema-list'
 import { InputRule } from 'prosemirror-inputrules'
+import { TextSelection } from 'prosemirror-state'
+
+/**
+ * Return true if the given resolved position is inside a blockquote.
+ */
+function isInsideBlockquote($pos, blockquoteType) {
+  if (!blockquoteType) return false
+  for (let d = $pos.depth; d > 0; d--) {
+    if ($pos.node(d).type === blockquoteType) return true
+  }
+  return false
+}
+
+/**
+ * Set the cursor inside the list item's paragraph, at the end of the original
+ * content. Without this, `replaceWith` (which uses a closed slice) maps the
+ * cursor to AFTER the inserted list, causing it to appear on a new line.
+ */
+function setListSelection(tr, listNode, contentSize) {
+  // listNode = ul/ol → first child = list_item → first child = paragraph.
+  // Find the paragraph's absolute position in the transaction's new document.
+  let listPos = -1
+  // The list was inserted at the position of the original paragraph.
+  // Walk the doc to find it (there might be only one; we look for our listNode).
+  tr.doc.descendants((node, pos) => {
+    if (listPos >= 0) return false
+    if (node === listNode) {
+      listPos = pos
+      return false
+    }
+  })
+  if (listPos < 0) return tr
+  const listItem = listNode.firstChild
+  const paragraph = listItem.firstChild
+  // Paragraph content starts at listPos + 1 (list open) + 1 (li open) + 1 (p open) = listPos + 3
+  const cursorPos = listPos + 3 + contentSize
+  const $cursor = tr.doc.resolve(cursorPos)
+  return tr.setSelection(TextSelection.near($cursor))
+}
 
 export const BulletList = NodeExtension.create({
   name: 'bullet_list',
@@ -144,24 +183,32 @@ export const ListItem = NodeExtension.create({
     if (editor.schema.nodes.bullet_list && editor.schema.nodes.list_item) {
       rules.push(new InputRule(/^(?:[-*+])\s$/, (state, match, start, end) => {
         const $start = state.doc.resolve(start)
+        // Inside a blockquote: don't recognize markdown list syntax
+        if (isInsideBlockquote($start, state.schema.nodes.blockquote)) return null
         const paragraph = $start.parent
         const content = paragraph.content.cut(0, start - $start.start)
         const p = state.schema.nodes.paragraph.create(null, content)
         const li = state.schema.nodes.list_item.create(null, p)
         const ul = state.schema.nodes.bullet_list.create(null, li)
-        return state.tr.replaceWith($start.before(), $start.after(), ul)
+        let tr = state.tr.replaceWith($start.before(), $start.after(), ul)
+        tr = setListSelection(tr, ul, content.size)
+        return tr
       }))
     }
 
     if (editor.schema.nodes.ordered_list && editor.schema.nodes.list_item) {
       rules.push(new InputRule(/^(\d+)\.\s$/, (state, match, start, end) => {
         const $start = state.doc.resolve(start)
+        // Inside a blockquote: don't recognize markdown list syntax
+        if (isInsideBlockquote($start, state.schema.nodes.blockquote)) return null
         const paragraph = $start.parent
         const content = paragraph.content.cut(0, start - $start.start)
         const p = state.schema.nodes.paragraph.create(null, content)
         const li = state.schema.nodes.list_item.create(null, p)
         const ol = state.schema.nodes.ordered_list.create({ start: +match[1] }, li)
-        return state.tr.replaceWith($start.before(), $start.after(), ol)
+        let tr = state.tr.replaceWith($start.before(), $start.after(), ol)
+        tr = setListSelection(tr, ol, content.size)
+        return tr
       }))
     }
 

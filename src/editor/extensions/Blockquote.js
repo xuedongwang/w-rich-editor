@@ -5,7 +5,7 @@ import { InputRule } from 'prosemirror-inputrules'
 export const Blockquote = NodeExtension.create({
   name: 'blockquote',
   group: 'block',
-  content: 'block+',
+  content: 'paragraph+',
   defining: true,
   toDOM: () => ['blockquote', 0],
   parseDOM: [{ tag: 'blockquote' }],

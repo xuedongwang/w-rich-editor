@@ -1,5 +1,6 @@
 import { NodeExtension } from '../Extension'
-import { textblockTypeInputRule } from 'prosemirror-inputrules'
+import { InputRule, textblockTypeInputRule } from 'prosemirror-inputrules'
+import { convertBlockType } from '../utils/blockType.js'
 
 const DEFAULT_LEVELS = [1, 2, 3, 4, 5, 6]
 
@@ -14,9 +15,7 @@ function buildParsedConfig(levels) {
     shortcuts[`Mod-Alt-${level}`] = (state, dispatch) => {
       const headingType = state.schema.nodes.heading
       if (!headingType) return false
-      const { $from } = state.selection
-      if (dispatch) dispatch(state.tr.setNodeMarkup($from.before(), headingType, { level }))
-      return true
+      return convertBlockType(headingType, { level }, state, dispatch)
     }
   })
   return { parseDOM, inputRuleSpecs, shortcuts }
@@ -59,11 +58,10 @@ const baseConfig = {
         if (!levels.includes(attrs.level)) return false
         const { $from } = state.selection
         if ($from.parent.type === headingType && $from.parent.attrs.level === attrs.level) {
-          if (dispatch) dispatch(state.tr.setNodeMarkup($from.before(), paragraphType))
+          return convertBlockType(paragraphType, null, state, dispatch)
         } else {
-          if (dispatch) dispatch(state.tr.setNodeMarkup($from.before(), headingType, attrs))
+          return convertBlockType(headingType, attrs, state, dispatch)
         }
-        return true
       },
     }
   },
@@ -73,10 +71,20 @@ const baseConfig = {
   },
   addInputRules() {
     const levels = this.options?.levels || DEFAULT_LEVELS
-    const specs = buildParsedConfig(levels).inputRuleSpecs
-    return specs.map(({ regex, attrs }) =>
-      textblockTypeInputRule(regex, this.editor.schema.nodes.heading, attrs),
-    )
+    return levels.map((level) => {
+      const regex = new RegExp(`^${'#'.repeat(level)}\\s$`)
+      const attrs = { level }
+      const fallbackRule = textblockTypeInputRule(regex, this.editor.schema.nodes.heading, () => attrs)
+      return new InputRule(regex, (state, match, start, end) => {
+        const $start = state.doc.resolve(start)
+        // Inside a blockquote (or other block-only ancestor): don't recognize
+        // the markdown heading syntax. Let the text stay as-is.
+        for (let d = $start.depth; d > 0; d--) {
+          if ($start.node(d).type.name === 'blockquote') return null
+        }
+        return fallbackRule.handler(state, match, start, end)
+      })
+    })
   },
 }
 

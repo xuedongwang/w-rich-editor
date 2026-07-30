@@ -16,8 +16,8 @@ describe('Blockquote 节点定义', () => {
     expect(Blockquote.resolve().nodeSpec.group).toBe('block')
   })
 
-  it('要求 block+ 内容', () => {
-    expect(Blockquote.resolve().nodeSpec.content).toBe('block+')
+  it('要求 paragraph+ 内容', () => {
+    expect(Blockquote.resolve().nodeSpec.content).toBe('paragraph+')
   })
 
   it('具有 defining 属性', () => {
@@ -76,6 +76,91 @@ describe('Blockquote 快捷键', () => {
     const shortcuts = ext._addKeyboardShortcuts.call(ext)
     shortcuts['Mod-Shift-b'](editor.state, editor.view.dispatch)
     expect(editor.getHTML()).not.toContain('<blockquote>')
+  })
+})
+
+describe('Blockquote 内容限制', () => {
+  it('在引用块内切换标题会将内容提升出引用块', () => {
+    editor = createEditor({ content: '<blockquote><p>Quoted text</p></blockquote>' })
+    setCursor(editor, 2)
+    editor.commands.toggleHeading({ level: 1 })
+    expect(editor.getHTML()).toContain('<h1>')
+    expect(editor.getHTML()).not.toContain('<blockquote>')
+  })
+
+  it('在引用块内切换代码块会将内容提升出引用块', () => {
+    editor = createEditor({ content: '<blockquote><p>Quoted text</p></blockquote>' })
+    setCursor(editor, 2)
+    editor.commands.toggleCodeBlock({ language: '' })
+    expect(editor.getHTML()).toContain('<pre')
+    expect(editor.getHTML()).not.toContain('<blockquote>')
+  })
+
+  it('在引用块内插入分隔线失败', () => {
+    editor = createEditor({ content: '<blockquote><p>Quoted text</p></blockquote>' })
+    setCursor(editor, 2)
+    const result = editor.commands.insertDivider()
+    expect(result).toBe(false)
+    expect(editor.getHTML()).toContain('<blockquote>')
+  })
+
+  it('在引用块内无法用快捷键插入分隔线', () => {
+    editor = createEditor({ content: '<blockquote><p>Quoted text</p></blockquote>' })
+    setCursor(editor, 2)
+    const ext = editor.extensions.find(e => e.name === 'horizontal_rule')
+    const shortcuts = ext._addKeyboardShortcuts.call(ext)
+    const result = shortcuts['Mod-_'](editor.state, editor.view.dispatch)
+    expect(result).toBe(false)
+    expect(editor.getHTML()).toContain('<blockquote>')
+  })
+
+  it('在引用块内列表包裹失败', () => {
+    editor = createEditor({ content: '<blockquote><p>Quoted text</p></blockquote>' })
+    setCursor(editor, 2)
+    const result = editor.commands.toggleBulletList()
+    expect(result).toBe(false)
+    expect(editor.getHTML()).toContain('<blockquote>')
+  })
+
+  it('schema 要求 paragraph+ 内容', () => {
+    editor = createEditor()
+    const bqType = editor.schema.nodes.blockquote
+    expect(bqType.spec.content).toBe('paragraph+')
+  })
+})
+
+describe('Blockquote 内 Markdown 输入规则不识别', () => {
+  // Helper: find the input rule whose regexp matches `pattern` and call its handler.
+  function fireInputRule(extName, pattern) {
+    const ext = editor.extensions.find(e => e.name === extName)
+    const rules = ext._addInputRules.call(ext)
+    for (const rule of rules) {
+      const match = pattern.match(rule.match)
+      if (match) {
+        const { $from } = editor.state.selection
+        const start = $from.start()
+        return rule.handler(editor.state, match, start, start + pattern.length)
+      }
+    }
+    return undefined
+  }
+
+  it('在引用块内输入 # + 空格不创建标题', () => {
+    editor = createEditor({ content: '<blockquote><p># </p></blockquote>' })
+    setCursor(editor, 4) // after "# "
+    const result = fireInputRule('heading', '# ')
+    expect(result).toBeNull()
+    expect(editor.getHTML()).not.toContain('<h1>')
+    expect(editor.getHTML()).toContain('<blockquote>')
+  })
+
+  it('在引用块内输入 ``` 不创建代码块', () => {
+    editor = createEditor({ content: '<blockquote><p>```</p></blockquote>' })
+    setCursor(editor, 4)
+    const result = fireInputRule('code_block', '```')
+    expect(result).toBeNull()
+    expect(editor.getHTML()).not.toContain('<pre')
+    expect(editor.getHTML()).toContain('<blockquote>')
   })
 })
 
