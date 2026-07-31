@@ -2,6 +2,7 @@ import { NodeExtension } from '../Extension.js'
 import { wrapInList, splitListItem, liftListItem, sinkListItem } from 'prosemirror-schema-list'
 import { InputRule } from 'prosemirror-inputrules'
 import { TextSelection } from 'prosemirror-state'
+import { Fragment } from 'prosemirror-model'
 
 /**
  * Return true if the given resolved position is inside a blockquote.
@@ -41,6 +42,28 @@ function setListSelection(tr, listNode, contentSize) {
   return tr.setSelection(TextSelection.near($cursor))
 }
 
+/**
+ * Convert a list from one type to another by rebuilding children with the
+ * target item type.
+ */
+function convertListType(state, dispatch, listDepth, targetListType, targetItemType) {
+  const listNode = state.selection.$from.node(listDepth)
+  const items = []
+  listNode.forEach(child => {
+    const content = []
+    child.forEach(c => content.push(c))
+    items.push(targetItemType.create(child.attrs, content))
+  })
+  if (dispatch) {
+    dispatch(state.tr.replaceWith(
+      state.selection.$from.before(listDepth),
+      state.selection.$from.after(listDepth),
+      targetListType.create(null, items),
+    ))
+  }
+  return true
+}
+
 export const BulletList = NodeExtension.create({
   name: 'bullet_list',
   group: 'block',
@@ -75,7 +98,7 @@ export const ListItem = NodeExtension.create({
   addCommands() {
     return {
       toggleBulletList: () => (state, dispatch) => {
-        const { bullet_list, ordered_list, list_item } = state.schema.nodes
+        const { bullet_list, ordered_list, task_list, list_item, task_item } = state.schema.nodes
         if (!bullet_list || !list_item) return false
         const { $from } = state.selection
 
@@ -83,7 +106,7 @@ export const ListItem = NodeExtension.create({
         let listDepth = -1
         for (let d = $from.depth; d > 0; d--) {
           const n = $from.node(d)
-          if (n.type === bullet_list || n.type === ordered_list) {
+          if (n.type === bullet_list || n.type === ordered_list || n.type === task_list) {
             listDepth = d
             break
           }
@@ -102,22 +125,26 @@ export const ListItem = NodeExtension.create({
 
         if (listNode.type === ordered_list) {
           // In ordered list → convert to bullet list
-          if (dispatch) dispatch(state.tr.setNodeMarkup($from.before(listDepth), bullet_list))
-          return true
+          return convertListType(state, dispatch, listDepth, bullet_list, list_item)
+        }
+
+        if (listNode.type === task_list && task_item) {
+          // In task list → convert to bullet list
+          return convertListType(state, dispatch, listDepth, bullet_list, list_item)
         }
 
         return false
       },
 
       toggleOrderedList: () => (state, dispatch) => {
-        const { ordered_list, bullet_list, list_item } = state.schema.nodes
+        const { ordered_list, bullet_list, task_list, list_item, task_item } = state.schema.nodes
         if (!ordered_list || !list_item) return false
         const { $from } = state.selection
 
         let listDepth = -1
         for (let d = $from.depth; d > 0; d--) {
           const n = $from.node(d)
-          if (n.type === ordered_list || n.type === bullet_list) {
+          if (n.type === ordered_list || n.type === bullet_list || n.type === task_list) {
             listDepth = d
             break
           }
@@ -134,8 +161,11 @@ export const ListItem = NodeExtension.create({
         }
 
         if (listNode.type === bullet_list) {
-          if (dispatch) dispatch(state.tr.setNodeMarkup($from.before(listDepth), ordered_list))
-          return true
+          return convertListType(state, dispatch, listDepth, ordered_list, list_item)
+        }
+
+        if (listNode.type === task_list && task_item) {
+          return convertListType(state, dispatch, listDepth, ordered_list, list_item)
         }
 
         return false

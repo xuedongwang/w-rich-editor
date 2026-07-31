@@ -6,7 +6,7 @@ import { Fragment, Slice } from 'prosemirror-model'
 // Markdown detection
 // ============================================================================
 
-const MD_BLOCK_START = /^(#{1,6}\s|[-*+]\s|>\s|\d+\.\s|---+$|```)/
+const MD_BLOCK_START = /^(#{1,6}\s|[-*+]\s(\[[x ]?\]\s)?|>\s|\d+\.\s|---+$|```)/
 
 export function isMarkdown(text) {
   return MD_BLOCK_START.test(text.trimStart())
@@ -146,7 +146,11 @@ export function parseMarkdown(schema, text) {
 
   while (i < lines.length) {
     const line = lines[i]
-    const trimmed = line.trim()
+    // trimStart: keep trailing whitespace so task list regex `- [ ] ` (which
+    // requires a trailing space) matches even when lines have no content after
+    // the checkbox. Other block regexes (heading, blockquote, etc.) already
+    // consume their content explicitly, so trailing whitespace is harmless.
+    const trimmed = line.trimStart()
 
     // — Empty line —
     if (!trimmed) { i++; continue }
@@ -156,7 +160,7 @@ export function parseMarkdown(schema, text) {
       const lang = trimmed.slice(3).trim() || ''
       const codeLines = []
       i++
-      while (i < lines.length && !lines[i].trim().startsWith('```')) {
+      while (i < lines.length && !lines[i].trimStart().startsWith('```')) {
         codeLines.push(lines[i])
         i++
       }
@@ -181,7 +185,7 @@ export function parseMarkdown(schema, text) {
 
     // — Blockquote —
     if (trimmed.startsWith('> ') && schema.nodes.blockquote) {
-      const inlineNodes = parseInline(schema, trimmed.slice(2))
+      const inlineNodes = parseInline(schema, trimmed.slice(2).trim())
       nodes.push(schema.nodes.blockquote.create(null, [
         schema.nodes.paragraph.create(null, inlineNodes),
       ]))
@@ -190,19 +194,20 @@ export function parseMarkdown(schema, text) {
     }
 
     // — Divider —
-    if (/^---+$/.test(trimmed) && schema.nodes.horizontal_rule) {
+    if (/^---+\s*$/.test(trimmed) && schema.nodes.horizontal_rule) {
       nodes.push(schema.nodes.horizontal_rule.create())
       i++
       continue
     }
 
-    // — Task list —
-    if (/^[-*+]\s\[[ x]\]\s/.test(trimmed) && schema.nodes.task_list) {
+    // — Task list (must be checked before unordered list) —
+    if (/^[-*+]\s\[[x ]?\]\s?/.test(trimmed) && schema.nodes.task_list) {
       const items = []
       while (i < lines.length) {
-        const m = lines[i].trim().match(/^[-*+]\s\[([ x])\]\s(.*)/)
+        const m = lines[i].trimStart().match(/^[-*+]\s\[([x ]?)\]\s?(.*)/)
         if (!m) break
-        const inlineNodes = parseInline(schema, m[2])
+        const content = (m[2] || '').trim()
+        const inlineNodes = content ? parseInline(schema, content) : []
         items.push(schema.nodes.task_item.create({ checked: m[1] === 'x' }, [
           schema.nodes.paragraph.create(null, inlineNodes),
         ]))
@@ -216,9 +221,10 @@ export function parseMarkdown(schema, text) {
     if (/^[-*+]\s/.test(trimmed) && schema.nodes.bullet_list) {
       const items = []
       while (i < lines.length) {
-        const m = lines[i].trim().match(/^[-*+]\s(.*)/)
+        const m = lines[i].trimStart().match(/^[-*+]\s(.*)/)
         if (!m) break
-        const inlineNodes = parseInline(schema, m[1])
+        const content = (m[1] || '').trim()
+        const inlineNodes = content ? parseInline(schema, content) : []
         items.push(schema.nodes.list_item.create(null, [
           schema.nodes.paragraph.create(null, inlineNodes),
         ]))
@@ -232,9 +238,10 @@ export function parseMarkdown(schema, text) {
     if (/^\d+\.\s/.test(trimmed) && schema.nodes.ordered_list) {
       const items = []
       while (i < lines.length) {
-        const m = lines[i].trim().match(/^\d+\.\s(.*)/)
+        const m = lines[i].trimStart().match(/^\d+\.\s(.*)/)
         if (!m) break
-        const inlineNodes = parseInline(schema, m[1])
+        const content = (m[1] || '').trim()
+        const inlineNodes = content ? parseInline(schema, content) : []
         items.push(schema.nodes.list_item.create(null, [
           schema.nodes.paragraph.create(null, inlineNodes),
         ]))
@@ -246,7 +253,7 @@ export function parseMarkdown(schema, text) {
 
     // — Paragraph (default) —
     {
-      const inlineNodes = parseInline(schema, trimmed)
+      const inlineNodes = parseInline(schema, trimmed.trim())
       nodes.push(schema.nodes.paragraph.create(null, inlineNodes))
       i++
     }

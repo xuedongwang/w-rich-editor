@@ -3,6 +3,7 @@
    ========================================================================= */
 
 .w-rich-editor {
+  position: relative;
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 0 0 8px 8px;
@@ -26,4 +27,14 @@
   float: left;
   height: 0;
   pointer-events: none;
+}
+
+/* Icon spinner (for loading icons) */
+.icon-spin {
+  animation: icon-spin-animation 1s linear infinite;
+}
+
+@keyframes icon-spin-animation {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }

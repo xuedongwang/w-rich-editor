@@ -3,6 +3,7 @@ import { Editor } from '../src/editor/Editor.js'
 import {
   Document, Paragraph, Heading,
   BulletList, OrderedList, ListItem,
+  TaskList, TaskItem,
   Blockquote, CodeBlock, Divider,
   Bold, Italic, Code,
   History, DropCursorExt, TextAlign, MarkdownPaste, Image,
@@ -15,6 +16,8 @@ export const DEFAULT_EXTENSIONS = [
   BulletList.resolve(),
   OrderedList.resolve(),
   ListItem.resolve(),
+  TaskList.resolve(),
+  TaskItem.resolve(),
   Blockquote.resolve(),
   CodeBlock.resolve(),
   Divider.resolve(),

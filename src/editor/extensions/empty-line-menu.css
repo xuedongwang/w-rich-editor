@@ -1,0 +1,59 @@
+/* Empty Line Menu — floating command menu shown on empty paragraphs */
+
+.empty-line-menu {
+  min-width: 220px;
+  max-width: 320px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  font-size: 14px;
+  color: #1f2937;
+}
+
+.empty-line-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.empty-line-menu-item:hover,
+.empty-line-menu-item.is-highlighted {
+  background: #f3f4f6;
+}
+
+.empty-line-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: #eef2ff;
+  color: #6366f1;
+  flex-shrink: 0;
+}
+
+.empty-line-menu-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.empty-line-menu-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.empty-line-menu-separator {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 4px 6px;
+}

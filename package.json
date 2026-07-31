@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "4.3.3",
+    "lucide": "1.28.0",
     "prismjs": "1.30.0",
     "prosemirror-commands": "1.7.1",
     "prosemirror-dropcursor": "1.8.3",

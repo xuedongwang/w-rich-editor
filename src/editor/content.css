@@ -73,6 +73,43 @@
   color: #9ca3af;
 }
 
+/* Task List */
+.w-rich-editor .task-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.5em 0;
+}
+.w-rich-editor .task-item-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+  margin: 0.2em 0;
+}
+.w-rich-editor .task-item-wrapper .task-checkbox {
+  cursor: pointer;
+  font-size: 1.1em;
+  line-height: 1.4;
+  user-select: none;
+  flex-shrink: 0;
+  color: #6366f1;
+  width: 1.2em;
+  text-align: center;
+}
+.w-rich-editor .task-item-wrapper .task-checkbox:hover {
+  color: #4f46e5;
+}
+.w-rich-editor .task-item-wrapper .task-item-content {
+  flex: 1;
+  min-width: 0;
+}
+.w-rich-editor .task-item-wrapper .task-item-content > p {
+  margin: 0;
+}
+.w-rich-editor .task-item-wrapper.is-checked .task-item-content > p {
+  text-decoration: line-through;
+  color: #9ca3af;
+}
+
 /* Blockquote */
 .w-rich-editor blockquote {
   border-left: 3px solid #6366f1;

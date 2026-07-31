@@ -3,15 +3,20 @@ import 'prismjs/themes/prism-tomorrow.css'
 import './editor/style.css'
 import './editor/content.css'
 import './editor/extensions/image-upload.css'
+import './editor/extensions/ai-assistant.css'
+import './editor/extensions/block-handle.css'
+import './editor/extensions/empty-line-menu.css'
 import './style.css'
 import { Editor } from './editor/index.js'
 import {
   Document, Paragraph, Heading,
   BulletList, OrderedList, ListItem,
+  TaskList, TaskItem,
   Blockquote, CodeBlock, Divider,
   Bold, Italic, Code,
   History, DropCursorExt, TextAlign, MarkdownPaste,
   Image, ImageUpload,
+  EmptyLineMenu, BlockHandle, AIAssistant,
 } from './editor/index.js'
 
 // ============================================================================
@@ -54,6 +59,8 @@ function updateBlockSelect(ed) {
     select.value = 'bullet-list'
   } else if (type === 'ordered_list' || (type === 'list_item' && $from.node($from.depth - 1)?.type.name === 'ordered_list')) {
     select.value = 'ordered-list'
+  } else if (type === 'task_list' || (type === 'task_item')) {
+    select.value = 'task-list'
   } else if (type === 'blockquote') {
     select.value = 'blockquote'
   } else if (type === 'code_block') {
@@ -75,6 +82,26 @@ function updateAlignSelect(ed) {
 // Create Editor
 // ============================================================================
 
+// AI API key — read from URL query param or prompt
+const urlParams = new URLSearchParams(window.location.search)
+let aiApiKey = urlParams.get('ai-key') || localStorage.getItem('w-editor-ai-key') || ''
+if (!aiApiKey && typeof prompt === 'function') {
+  // Prompt once on first load (skip if in test env)
+  try {
+    const stored = localStorage.getItem('w-editor-ai-skip-prompt')
+    if (!stored && window.confirm('配置 DeepSeek API key 以启用 AI 功能？\n\n（取消或留空则跳过）')) {
+      const key = prompt('请输入 DeepSeek API Key:')
+      if (key) {
+        aiApiKey = key
+        localStorage.setItem('w-editor-ai-key', key)
+      }
+      localStorage.setItem('w-editor-ai-skip-prompt', '1')
+    }
+  } catch {
+    // localStorage/prompt not available (e.g., in test env)
+  }
+}
+
 const editor = new Editor({
   target: editorEl,
   content: `
@@ -84,12 +111,14 @@ const editor = new Editor({
     <ul>
       <li><p>加粗、斜体、行内代码</p></li>
       <li><p>标题（H1-H6）</p></li>
-      <li><p>有序列表 &amp; 无序列表</p></li>
-      <li><p>引用块</p></li>
-      <li><p>代码块</p></li>
-      <li><p>分割线</p></li>
+      <li><p>有序列表 &amp; 无序列表 &amp; 任务列表</p></li>
+      <li><p>引用块、代码块、分割线</p></li>
+      <li><p>🪄 空行菜单（点击空段落查看）</p></li>
+      <li><p>⋮⋮ 块拖拽手柄（悬停块左侧查看）</p></li>
+      <li><p>✨ AI 辅助写作（选中文本后查看）</p></li>
     </ul>
-    <blockquote><p>试试输入 <code>#</code>、<code>-</code>、<code>&gt;</code>、<code>\`\`\`</code> 等 Markdown 快捷语法</p></blockquote>
+    <blockquote><p>试试输入 <code>#</code>、<code>-</code>、<code>- [ ]</code>、<code>&gt;</code>、<code>\`\`\`</code> 等 Markdown 快捷语法</p></blockquote>
+    <p></p>
     <p>使用上方工具栏或快捷键 <code>Mod+B</code>、<code>Mod+I</code> 来格式化文本。</p>
     <h2>代码高亮示例</h2>
     <pre><code class="language-javascript">function fibonacci(n) {
@@ -108,6 +137,8 @@ console.log("Result: " + result) // 55</code></pre>
     BulletList.resolve(),
     OrderedList.resolve(),
     ListItem.resolve(),
+    TaskList.resolve(),
+    TaskItem.resolve(),
     Blockquote.resolve(),
     CodeBlock.resolve(),
     Divider.resolve(),
@@ -122,6 +153,11 @@ console.log("Result: " + result) // 55</code></pre>
       useBase64: true,
     }),
     MarkdownPaste.resolve(),
+    EmptyLineMenu.resolve(),
+    BlockHandle.resolve(),
+    AIAssistant.configure({
+      apiKey: aiApiKey,
+    }),
   ],
   onUpdate({ editor }) {
     updateToolbarState(editor)
@@ -172,6 +208,7 @@ blockSelect.innerHTML = `
   <option value="heading-6">标题 6</option>
   <option value="bullet-list">无序列表</option>
   <option value="ordered-list">有序列表</option>
+  <option value="task-list">任务列表</option>
   <option value="blockquote">引用</option>
   <option value="code-block">代码块</option>
 `
@@ -187,6 +224,7 @@ blockSelect.addEventListener('change', () => {
     'heading-6': () => editor.commands.toggleHeading?.({ level: 6 }),
     'bullet-list': () => editor.commands.toggleBulletList?.(),
     'ordered-list': () => editor.commands.toggleOrderedList?.(),
+    'task-list': () => editor.commands.toggleTaskList?.(),
     'blockquote': () => editor.commands.toggleBlockquote?.(),
     'code-block': () => editor.commands.toggleCodeBlock?.(),
   }
