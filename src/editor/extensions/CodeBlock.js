@@ -166,6 +166,10 @@ class CodeBlockView {
     // Language header bar (contains label + copy button)
     this.header = document.createElement('div')
     this.header.className = 'code-lang-label'
+    // Prevent any cursor or focus from entering the header
+    this.header.setAttribute('contenteditable', 'false')
+    this.header.setAttribute('tabindex', '-1')
+    this.header.setAttribute('role', 'presentation')
 
     // Language text label
     this.langText = document.createElement('span')

@@ -45,8 +45,8 @@ describe('Paragraph 扩展', () => {
     expect(rule.getAttrs({})).toEqual({})
   })
 
-  it('无命令', () => {
-    expect(resolved._addCommands).toBeUndefined()
+  it('setParagraph 命令存在', () => {
+    expect(resolved._addCommands).toBeDefined()
   })
 
   it('无键盘快捷键', () => {

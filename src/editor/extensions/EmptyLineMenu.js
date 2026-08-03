@@ -1,5 +1,5 @@
 import { Extension } from '../Extension.js'
-import { Plugin } from 'prosemirror-state'
+import { Plugin, TextSelection } from 'prosemirror-state'
 import {
   createFloatingElement,
   getCaretRect,
@@ -49,7 +49,10 @@ function runItemAction(key, editor) {
   const commands = editor.commands
   switch (key) {
     case 'paragraph':
-      return commands.toggleHeading?.({ level: 1 })
+      // 确保当前块是段落（若已是段落则 no-op）
+      if (commands.setParagraph) return commands.setParagraph()
+      // 回退：若当前已是段落，返回 true 代表操作成功（不做任何变更）
+      return true
     case 'heading-1':
       return commands.toggleHeading?.({ level: 1 })
     case 'heading-2':
@@ -208,13 +211,69 @@ export const EmptyLineMenu = Extension.create({
 
     return [
       new Plugin({
+        props: {
+          handleKeyDown(view, event) {
+            if (!enabled) return false
+            // Only intercept '/' on an empty paragraph
+            if (event.key !== '/' && event.key !== 'U+002F') return false
+            if (!isEmptyParagraph(view.state)) return false
+
+            // Insert '/' into the document.
+            // Set _pendingOpen BEFORE dispatch so that appendTransaction and
+            // view.update() (both called during dispatch) see it as true.
+            const { $from } = view.state.selection
+            const pos = $from.pos
+            ext._pendingOpen = true
+            const tr = view.state.tr.insertText('/', pos)
+            view.dispatch(tr)
+
+            return true
+          },
+        },
+
+        appendTransaction(transactions, oldState, newState) {
+          // If '/' was just typed on an empty line, record the slash position
+          // so view.update() can open the menu (after the DOM has been updated).
+          // NOTE: we do NOT reset _pendingOpen here — view.update() handles that,
+          // because it runs AFTER appendTransaction (during view.updateState).
+          if (ext._pendingOpen) {
+            ext._slashPos = newState.selection.from
+            return null
+          }
+
+          // If the menu is open, check whether the '/' has been deleted
+          if (ext._menu && ext._slashPos != null) {
+            if (!hasSlashAtPos(newState, ext._slashPos)) {
+              // '/' was deleted → close the menu (cleanup deferred to view.update)
+              closeMenu(ext)
+              return null
+            }
+          }
+
+          return null
+        },
+
         view(editorView) {
+          ext._view = editorView
+
           let initialized = false
           let lastDoc = editorView.state.doc
           let lastSelection = editorView.state.selection
+
           return {
             update(view) {
               if (!enabled) return
+              // Skip processing during closeMenu's own slash-deletion dispatch
+              // to avoid double-cleanup or re-opening the menu.
+              if (ext._isClosing) return
+
+              // Reset _pendingOpen: if appendTransaction already handled it
+              // (by setting _slashPos), it's safe to clear the flag here.
+              // If the flag was set by handleKeyDown but appendTransaction
+              // hasn't run yet (shouldn't happen, but defensive), we clear
+              // it to prevent stale state.
+              const pendingOpen = ext._pendingOpen === true
+              ext._pendingOpen = false
 
               const state = view.state
               const changed = !initialized
@@ -227,19 +286,34 @@ export const EmptyLineMenu = Extension.create({
 
               if (!changed) return
 
-              // If menu is open, only keep it open if still on empty paragraph
+              // ——— Menu is open ———
               if (ext._menu) {
-                if (!isEmptyParagraph(state)) {
+                // Close if cursor left the textblock containing '/'
+                if (ext._slashPos != null) {
+                  try {
+                    const $pos = state.doc.resolve(ext._slashPos)
+                    if (!$pos.parent.isTextblock) {
+                      closeMenu(ext)
+                      return
+                    }
+                  } catch {
+                    closeMenu(ext)
+                    return
+                  }
+                }
+                // Close if the paragraph is no longer exactly "/"
+                if (!isEmptyParagraphWithSlash(state, ext._slashPos)) {
                   closeMenu(ext)
                 }
                 return
               }
 
-              // Open menu on empty paragraph
-              if (isEmptyParagraph(state)) {
+              // ——— Menu is closed — open if '/' was just typed ———
+              if (pendingOpen && isEmptyParagraphWithSlash(state, ext._slashPos)) {
                 openMenu(ext, view, items)
               }
             },
+
             destroy() {
               closeMenu(ext)
             },
@@ -258,7 +332,37 @@ function isEmptyParagraph(state) {
   const { selection } = state
   if (!selection.empty) return false
   const { $from } = selection
-  return $from.parent.type.name === 'paragraph' && $from.parent.content.size === 0
+  // 必须是 doc 直接子节点（深度 1），blockquote/list 内的段落深度 ≥ 2
+  // 支持任何空的顶层文本块（段落、标题、引用等），让用户在删除内容后仍能触发菜单
+  return $from.depth === 1
+    && $from.parent.isTextblock
+    && $from.parent.content.size === 0
+}
+
+function hasSlashAtPos(state, pos) {
+  // `pos` is the cursor position right AFTER the slash. The slash itself
+  // sits at parentOffset = (pos's parentOffset) - 1 within its parent.
+  if (pos == null || pos <= 0) return false
+  try {
+    const resolved = state.doc.resolve(pos)
+    const slashOffset = resolved.parentOffset - 1
+    if (slashOffset < 0) return false
+    const result = resolved.parent.childAfter(slashOffset)
+    return !!(result.node && result.node.isText && result.node.text === '/')
+  } catch {
+    return false
+  }
+}
+
+function isEmptyParagraphWithSlash(state, slashPos) {
+  const { selection } = state
+  if (!selection.empty) return false
+  const { $from } = selection
+  if ($from.depth !== 1) return false
+  if (!$from.parent.isTextblock) return false
+  if ($from.parent.content.size !== 1) return false
+  if (slashPos == null) return false
+  return hasSlashAtPos(state, slashPos)
 }
 
 function openMenu(ext, view, items) {
@@ -271,17 +375,35 @@ function openMenu(ext, view, items) {
   const menuDOM = buildMenuDOM(effectiveItems, {
     onSelect: (item) => {
       if (item.type === 'separator') return
+      // ① 先把文档里的 '/' 触发符删干净，保证后续动作在干净的文档上执行
+      cleanupSlash(ext, view)
+      // ② 执行菜单动作（转标题/列表/引用等）
       runItemAction(item.key, editor)
+      // ③ 关闭菜单浮层（不再做 slash 清理）
       closeMenu(ext)
       view.focus()
     },
     onHighlight: () => {},
   })
 
-  const caretRect = getCaretRect(view)
-  // In jsdom (test env) layout is unavailable; fall back to a zero-sized rect
-  // at the origin so the menu still renders.
-  const anchorRect = caretRect || new DOMRect(0, 0, 0, 0)
+  // Position the menu at the slash character when available, otherwise at caret
+  let anchorRect
+  if (view && ext._slashPos != null) {
+    try {
+      const coords = view.coordsAtPos(ext._slashPos)
+      if (coords) {
+        anchorRect = new DOMRect(coords.left, coords.top, 0, coords.bottom - coords.top)
+      }
+    } catch { /* ignore layout errors in test envs */ }
+  }
+  if (!anchorRect) {
+    try {
+      const caretRect = view ? getCaretRect(view) : null
+      anchorRect = caretRect || new DOMRect(0, 0, 0, 0)
+    } catch {
+      anchorRect = new DOMRect(0, 0, 0, 0)
+    }
+  }
 
   const floating = createFloatingElement(menuDOM, { type: 'rect', rect: anchorRect }, {
     zIndex: 30,
@@ -302,11 +424,72 @@ function openMenu(ext, view, items) {
 
 function closeMenu(ext) {
   if (!ext._menu) return
+
+  // Prevent re-entrant processing when closeMenu dispatches a transaction
+  // (the resulting view.update would otherwise try to close again).
+  const shouldCleanup = ext._isClosing !== true
+  ext._isClosing = true
+
   const { floating, cleanupOutside, cleanupEscape } = ext._menu
   cleanupOutside()
   cleanupEscape()
   floating.destroy()
   ext._menu = null
+
+  ext._slashPos = null
+  ext._isClosing = false
+}
+
+/**
+ * Remove the '/' trigger character from the document.
+ * Called BEFORE the menu action so the action operates on a clean document.
+ * Also sweeps for any extra '/' characters that may have been typed before
+ * the menu intercepted (e.g. user typed "//" quickly).
+ */
+function cleanupSlash(ext, view) {
+  const slashPos = ext._slashPos
+  ext._slashPos = null
+  if (!view || slashPos == null) return
+
+  try {
+    const from = slashPos - 1
+    const to = slashPos
+    if (from < 0 || to > view.state.doc.content.size) return
+
+    let tr = view.state.tr
+    tr = tr.delete(from, to)
+
+    // Sweep the (now-modified) textblock for any remaining '/'
+    const $from = tr.doc.resolve(tr.mapping.map(from))
+    if ($from.parent.isTextblock) {
+      const start = $from.start()
+      const slashes = []
+      $from.parent.content.forEach((child, off) => {
+        if (child.isText && child.text) {
+          for (let i = 0; i < child.text.length; i++) {
+            if (child.text[i] === '/') slashes.push(start + off + i)
+          }
+        }
+      })
+      // Delete right-to-left so earlier positions stay valid
+      for (let i = slashes.length - 1; i >= 0; i--) {
+        tr = tr.delete(slashes[i], slashes[i] + 1)
+      }
+    }
+
+    // Place cursor at a valid position
+    const mapped = tr.mapping.map(view.state.selection.from)
+    const clamped = Math.max(0, Math.min(mapped, tr.doc.content.size))
+    try {
+      tr = tr.setSelection(TextSelection.near(tr.doc.resolve(clamped)))
+    } catch {
+      try {
+        tr = tr.setSelection(TextSelection.near(tr.doc.resolve(tr.mapping.map(from))))
+      } catch { /* ignore */ }
+    }
+
+    view.dispatch(tr)
+  } catch { /* ignore invalid positions */ }
 }
 
 function moveHighlight(ext, delta) {
@@ -324,6 +507,7 @@ function activateHighlighted(ext, view) {
   if (!items || index < 0 || index >= items.length) return
   const { item } = items[index]
   if (item.type === 'separator') return
+  cleanupSlash(ext, view)
   runItemAction(item.key, ext.editor)
   closeMenu(ext)
   view.focus()

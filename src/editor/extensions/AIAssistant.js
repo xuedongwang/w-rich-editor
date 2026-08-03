@@ -189,9 +189,10 @@ async function callDeepSeekStream(options, onChunk) {
 }
 
 /**
- * Non-streaming fallback for APIs that don't support streaming.
+ * Non-streaming DeepSeek call. Returns the full result text.
+ * Exported for reuse by other extensions (e.g. AIInput).
  */
-async function callDeepSeek(options) {
+export async function callDeepSeek(options) {
   const { apiKey, endpoint, model, systemPrompt, userContent } = options
 
   const response = await fetch(endpoint, {

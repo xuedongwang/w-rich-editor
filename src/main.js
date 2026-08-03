@@ -6,6 +6,7 @@ import './editor/extensions/image-upload.css'
 import './editor/extensions/ai-assistant.css'
 import './editor/extensions/block-handle.css'
 import './editor/extensions/empty-line-menu.css'
+import './editor/extensions/ai-input.css'
 import './style.css'
 import { Editor } from './editor/index.js'
 import {
@@ -16,7 +17,7 @@ import {
   Bold, Italic, Code,
   History, DropCursorExt, TextAlign, MarkdownPaste,
   Image, ImageUpload,
-  EmptyLineMenu, BlockHandle, AIAssistant,
+  EmptyLineMenu, BlockHandle, AIAssistant, AIInput,
 } from './editor/index.js'
 
 // ============================================================================
@@ -158,6 +159,7 @@ console.log("Result: " + result) // 55</code></pre>
     AIAssistant.configure({
       apiKey: aiApiKey,
     }),
+    AIInput.resolve(),
   ],
   onUpdate({ editor }) {
     updateToolbarState(editor)

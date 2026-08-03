@@ -272,3 +272,6 @@ editor.destroy()
 2. 每个 Phase 完成后进行手动功能测试
 3. Phase 7 引入 Vitest 单元测试 + Playwright E2E 测试
 4. `npm run build` 确认包可正确构建和导出
+
+
+// sk-9908f853f5a84941b0b3984646baace4

@@ -21,6 +21,27 @@ function createEditorWithMenu(options) {
   })
 }
 
+/**
+ * Simulate a keydown event on the editor view.
+ */
+function simulateKey(editor, key, opts = {}) {
+  const event = new KeyboardEvent('keydown', {
+    key,
+    bubbles: true,
+    cancelable: true,
+    ...opts,
+  })
+  return editor.view.dom.dispatchEvent(event)
+}
+
+/**
+ * Type a character via keydown event.
+ * Uses handleKeyDown detection (does NOT insert into the document).
+ */
+function typeChar(editor, char) {
+  simulateKey(editor, char)
+}
+
 // ============================================================================
 // 扩展定义
 // ============================================================================
@@ -59,50 +80,163 @@ describe('EmptyLineMenu 命令', () => {
 })
 
 // ============================================================================
-// 自动显示
+// 触发条件：仅在空行输入 / 时展示菜单
 // ============================================================================
 
-describe('EmptyLineMenu 自动显示', () => {
-  it('空段落触发时创建菜单 DOM', () => {
-    editor = createEditorWithMenu({ content: '<p></p>' })
-    // 触发 plugin view.update — 编辑器初始状态不会自动调用 update
+describe('EmptyLineMenu 触发条件', () => {
+  it('空段落不会自动打开菜单', () => {
+    editor = createEditorWithMenu()
+    editor.setContent('<p></p>')
+    setCursor(editor, 1)
+    // Trigger plugin view.update
     editor.view.dispatch(editor.state.tr)
     const menu = document.querySelector('.empty-line-menu')
+    expect(menu).toBe(null)
+  })
+
+  it('在空行输入 / 打开菜单', () => {
+    editor = createEditorWithMenu()
+    editor.setContent('<p></p>')
+    setCursor(editor, 1)
+    // Simulate typing '/'
+    typeChar(editor, '/')
+    const menu = document.querySelector('.empty-line-menu')
     expect(menu).toBeTruthy()
-    cleanup(editor)
-    editor = null
   })
 
-  it('非空段落不显示菜单', () => {
+  it('输入 / 后文档包含斜杠字符', () => {
     editor = createEditorWithMenu()
-    editor.setContent('<p>Hello</p>')
-    setCursor(editor, 3)
+    editor.setContent('<p></p>')
+    setCursor(editor, 1)
+    typeChar(editor, '/')
+    // The document should contain '/'
+    const text = editor.state.doc.textContent
+    expect(text).toBe('/')
+  })
+
+  it('在非空行输入 / 不打开菜单', () => {
+    editor = createEditorWithMenu()
+    editor.setContent('<p>hello</p>')
+    setCursor(editor, 6) // end of "hello"
+    typeChar(editor, '/')
     const menu = document.querySelector('.empty-line-menu')
     expect(menu).toBe(null)
   })
 
-  it('选区非空时不显示菜单', () => {
+  it('选区非空时输入 / 不打开菜单', () => {
     editor = createEditorWithMenu()
-    editor.setContent('<p>Hello</p>')
+    editor.setContent('<p>hello</p>')
     selectRange(editor, 1, 4)
+    typeChar(editor, '/')
     const menu = document.querySelector('.empty-line-menu')
     expect(menu).toBe(null)
   })
 
-  it('禁用后不显示菜单', () => {
-    editor = createEditorWithMenu({ content: '<p></p>', enabled: false })
+  it('禁用后输入 / 不打开菜单', () => {
+    editor = createEditorWithMenu({ enabled: false })
+    editor.setContent('<p></p>')
+    setCursor(editor, 1)
+    typeChar(editor, '/')
     const menu = document.querySelector('.empty-line-menu')
     expect(menu).toBe(null)
   })
 
-  it('切换到非空段落时菜单关闭', () => {
+  it('仅点击空段落不打开菜单', () => {
     editor = createEditorWithMenu()
     editor.setContent('<p></p><p>text</p>')
-    setCursor(editor, 1) // 第一个段落（空）→ 菜单出现
-    expect(document.querySelector('.empty-line-menu')).toBeTruthy()
-    // 移动到非空段落 → 菜单应关闭
-    setCursor(editor, 7) // 在 "text" 段落内
+    // Move cursor to empty paragraph (simulating a click)
+    setCursor(editor, 1)
+    // Dispatch a no-op transaction to trigger view.update
+    editor.view.dispatch(editor.state.tr)
+    const menu = document.querySelector('.empty-line-menu')
+    expect(menu).toBe(null)
+  })
+
+  it('从非空段落移动到空段落不打开菜单', () => {
+    editor = createEditorWithMenu()
+    editor.setContent('<p>text</p><p></p>')
+    setCursor(editor, 1) // non-empty paragraph
+    editor.view.dispatch(editor.state.tr)
     expect(document.querySelector('.empty-line-menu')).toBe(null)
+    // Move to empty paragraph
+    setCursor(editor, 6) // empty paragraph
+    editor.view.dispatch(editor.state.tr)
+    expect(document.querySelector('.empty-line-menu')).toBe(null)
+  })
+
+  it('在 blockquote 内的空段落输入 / 不打开菜单', () => {
+    editor = createEditorWithMenu()
+    editor.setContent('<blockquote><p></p></blockquote>')
+    // Cursor inside the blockquote's paragraph (depth 2)
+    setCursor(editor, 2)
+    typeChar(editor, '/')
+    const menu = document.querySelector('.empty-line-menu')
+    expect(menu).toBe(null)
+  })
+
+  it('在列表项内的空段落输入 / 不打开菜单', () => {
+    editor = createEditorWithMenu()
+    editor.setContent('<ul><li><p></p></li></ul>')
+    // Cursor inside the list item's paragraph (depth 3)
+    setCursor(editor, 3)
+    typeChar(editor, '/')
+    const menu = document.querySelector('.empty-line-menu')
+    expect(menu).toBe(null)
+  })
+})
+
+// ============================================================================
+// 菜单关闭
+// ============================================================================
+
+describe('EmptyLineMenu 菜单关闭', () => {
+  it('删除 / 后菜单关闭', () => {
+    editor = createEditorWithMenu()
+    editor.setContent('<p></p>')
+    setCursor(editor, 1)
+    typeChar(editor, '/')
+    expect(document.querySelector('.empty-line-menu')).toBeTruthy()
+    // jsdom has no contenteditable — directly delete the '/' via transaction
+    const tr = editor.state.tr.delete(1, 2)
+    editor.view.dispatch(tr)
+    const menu = document.querySelector('.empty-line-menu')
+    expect(menu).toBe(null)
+  })
+
+  it('按 Escape 关闭菜单', () => {
+    editor = createEditorWithMenu()
+    editor.setContent('<p></p>')
+    setCursor(editor, 1)
+    typeChar(editor, '/')
+    expect(document.querySelector('.empty-line-menu')).toBeTruthy()
+    // Press Escape
+    simulateKey(editor, 'Escape')
+    const menu = document.querySelector('.empty-line-menu')
+    expect(menu).toBe(null)
+  })
+
+  it('光标移出段落时菜单关闭', () => {
+    editor = createEditorWithMenu()
+    editor.setContent('<p></p><p>text</p>')
+    setCursor(editor, 1)
+    typeChar(editor, '/')
+    expect(document.querySelector('.empty-line-menu')).toBeTruthy()
+    // Move cursor to second paragraph
+    setCursor(editor, 4) // inside "text" paragraph
+    expect(document.querySelector('.empty-line-menu')).toBe(null)
+  })
+
+  it('输入额外字符后菜单关闭', () => {
+    editor = createEditorWithMenu()
+    editor.setContent('<p></p>')
+    setCursor(editor, 1)
+    typeChar(editor, '/')
+    expect(document.querySelector('.empty-line-menu')).toBeTruthy()
+    // jsdom has no contenteditable — directly insert text via transaction
+    const tr = editor.state.tr.insertText('a', 2)
+    editor.view.dispatch(tr)
+    const menu = document.querySelector('.empty-line-menu')
+    expect(menu).toBe(null)
   })
 })
 
@@ -115,8 +249,10 @@ describe('EmptyLineMenu 自定义菜单项', () => {
     const customItems = [
       { key: 'heading-1', label: '自定义标题', icon: 'H1', group: 'custom' },
     ]
-    editor = createEditorWithMenu({ content: '<p></p>', items: customItems })
+    editor = createEditorWithMenu({ items: customItems })
+    editor.setContent('<p></p>')
     setCursor(editor, 1)
+    typeChar(editor, '/')
     const menu = document.querySelector('.empty-line-menu')
     expect(menu).toBeTruthy()
     const rows = menu.querySelectorAll('.empty-line-menu-item')
@@ -125,8 +261,10 @@ describe('EmptyLineMenu 自定义菜单项', () => {
   })
 
   it('默认菜单包含常用块类型', () => {
-    editor = createEditorWithMenu({ content: '<p></p>' })
+    editor = createEditorWithMenu()
+    editor.setContent('<p></p>')
     setCursor(editor, 1)
+    typeChar(editor, '/')
     const menu = document.querySelector('.empty-line-menu')
     expect(menu).toBeTruthy()
     const labels = Array.from(menu.querySelectorAll('.empty-line-menu-label'))

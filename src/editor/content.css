@@ -279,6 +279,9 @@
   background: #181825;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   user-select: none;
+  cursor: default;
+  -webkit-user-select: none;
+  outline: none;
 }
 
 /* Copy button positioned inside header */
