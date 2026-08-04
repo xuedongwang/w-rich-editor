@@ -5,6 +5,7 @@ import {
   BulletList, OrderedList, ListItem,
   TaskList, TaskItem,
   Blockquote, CodeBlock, Divider,
+  Table, TableRow, TableCell, TableHeader,
   Bold, Italic, Code,
   History, DropCursorExt, TextAlign, MarkdownPaste, Image,
 } from '../src/editor/index.js'
@@ -21,6 +22,10 @@ export const DEFAULT_EXTENSIONS = [
   Blockquote.resolve(),
   CodeBlock.resolve(),
   Divider.resolve(),
+  Table.resolve(),
+  TableRow.resolve(),
+  TableCell.resolve(),
+  TableHeader.resolve(),
   Bold.resolve(),
   Italic.resolve(),
   Code.resolve(),

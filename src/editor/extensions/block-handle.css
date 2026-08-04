@@ -2,8 +2,8 @@
 
 .block-handle {
   position: fixed;
-  width: 20px;
-  height: 24px;
+  width: 24px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;

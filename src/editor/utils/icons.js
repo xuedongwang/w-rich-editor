@@ -51,7 +51,7 @@ export function renderIcon(iconNode, attrs = {}) {
 // ============================================================================
 
 export function gripIcon() {
-  return renderIcon(GripVertical, { width: '14', height: '14', class: 'icon-grip' })
+  return renderIcon(GripVertical, { width: '18', height: '18', class: 'icon-grip' })
 }
 
 export function sparklesIcon(attrs = {}) {

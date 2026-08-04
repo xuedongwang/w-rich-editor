@@ -63,6 +63,7 @@ export class NodeExtension {
     if (config.attrs) nodeSpec.attrs = config.attrs
     if (config.toDOM) nodeSpec.toDOM = config.toDOM
     if (config.parseDOM) nodeSpec.parseDOM = config.parseDOM
+    if (config.tableRole) nodeSpec.tableRole = config.tableRole
 
     return buildResolved(config, options, 'node', { nodeSpec })
   }

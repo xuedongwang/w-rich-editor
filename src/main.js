@@ -7,6 +7,7 @@ import './editor/extensions/ai-assistant.css'
 import './editor/extensions/block-handle.css'
 import './editor/extensions/empty-line-menu.css'
 import './editor/extensions/ai-input.css'
+import './editor/extensions/table.css'
 import './style.css'
 import { Editor } from './editor/index.js'
 import {
@@ -14,6 +15,7 @@ import {
   BulletList, OrderedList, ListItem,
   TaskList, TaskItem,
   Blockquote, CodeBlock, Divider,
+  Table, TableRow, TableCell, TableHeader,
   Bold, Italic, Code,
   History, DropCursorExt, TextAlign, MarkdownPaste,
   Image, ImageUpload,
@@ -56,6 +58,8 @@ function updateBlockSelect(ed) {
 
   if (type === 'heading') {
     select.value = `heading-${$from.parent.attrs.level}`
+  } else if (type === 'table_cell' || type === 'table_header') {
+    select.value = 'table-cell'
   } else if (type === 'bullet_list' || (type === 'list_item' && $from.node($from.depth - 1)?.type.name === 'bullet_list')) {
     select.value = 'bullet-list'
   } else if (type === 'ordered_list' || (type === 'list_item' && $from.node($from.depth - 1)?.type.name === 'ordered_list')) {
@@ -143,6 +147,10 @@ console.log("Result: " + result) // 55</code></pre>
     Blockquote.resolve(),
     CodeBlock.resolve(),
     Divider.resolve(),
+    Table.resolve(),
+    TableRow.resolve(),
+    TableCell.resolve(),
+    TableHeader.resolve(),
     Bold.resolve(),
     Italic.resolve(),
     Code.resolve(),
@@ -165,11 +173,13 @@ console.log("Result: " + result) // 55</code></pre>
     updateToolbarState(editor)
     updateBlockSelect(editor)
     updateAlignSelect(editor)
+    updateTableToolbar(editor)
   },
   onSelectionUpdate({ editor }) {
     updateToolbarState(editor)
     updateBlockSelect(editor)
     updateAlignSelect(editor)
+    updateTableToolbar(editor)
   },
 })
 
@@ -213,6 +223,7 @@ blockSelect.innerHTML = `
   <option value="task-list">任务列表</option>
   <option value="blockquote">引用</option>
   <option value="code-block">代码块</option>
+  <option value="table-cell">表格单元格</option>
 `
 blockSelect.addEventListener('change', () => {
   const val = blockSelect.value
@@ -307,6 +318,47 @@ toolbar.appendChild(divider())
 
 // Insert
 toolbar.appendChild(btn('—', 'insertDivider', null, '分割线'))
+toolbar.appendChild(btn('⊞', 'insertTable', null, '插入表格'))
+
+// Table context toolbar (visible only when cursor is inside a table)
+const tableToolbar = document.createElement('span')
+tableToolbar.id = 'table-toolbar'
+tableToolbar.className = 'table-toolbar'
+tableToolbar.style.display = 'none'
+tableToolbar.appendChild(divider())
+tableToolbar.appendChild(btn('⊞+', 'insertTable', null, '插入表格'))
+tableToolbar.appendChild(divider())
+tableToolbar.appendChild(btn('+↓', 'addColumnBefore', null, '向左插入列'))
+tableToolbar.appendChild(btn('+↓', 'addColumnAfter', null, '向右插入列'))
+tableToolbar.appendChild(btn('×↓', 'deleteColumn', null, '删除列'))
+tableToolbar.appendChild(divider())
+tableToolbar.appendChild(btn('+→', 'addRowBefore', null, '向上插入行'))
+tableToolbar.appendChild(btn('+→', 'addRowAfter', null, '向下插入行'))
+tableToolbar.appendChild(btn('×→', 'deleteRow', null, '删除行'))
+tableToolbar.appendChild(divider())
+tableToolbar.appendChild(btn('H↔', 'toggleHeaderRow', null, '切换行首'))
+tableToolbar.appendChild(btn('H↕', 'toggleHeaderColumn', null, '切换列首'))
+tableToolbar.appendChild(divider())
+tableToolbar.appendChild(btn('⊞', 'mergeCells', null, '合并单元格'))
+tableToolbar.appendChild(btn('⊟', 'splitCell', null, '拆分单元格'))
+tableToolbar.appendChild(divider())
+tableToolbar.appendChild(btn('×表', 'deleteTable', null, '删除表格'))
+toolbar.appendChild(tableToolbar)
+
+// Show/hide table toolbar based on cursor position
+function updateTableToolbar(ed) {
+  const tb = document.getElementById('table-toolbar')
+  if (!tb) return
+  const { $from } = ed.state.selection
+  let inTable = false
+  for (let d = $from.depth; d > 0; d--) {
+    if ($from.node(d).type.name === 'table') {
+      inTable = true
+      break
+    }
+  }
+  tb.style.display = inTable ? '' : 'none'
+}
 
 // ============================================================================
 // Status Bar — word count
@@ -329,3 +381,4 @@ updateStatus()
 // Initial state
 updateToolbarState(editor)
 updateBlockSelect(editor)
+updateTableToolbar(editor)

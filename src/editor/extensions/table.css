@@ -1,0 +1,69 @@
+/* Table — styling for tables inside the editor */
+
+.w-rich-editor table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 1em 0;
+  overflow: hidden;
+}
+
+.w-rich-editor td,
+.w-rich-editor th {
+  border: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  vertical-align: top;
+  text-align: left;
+  position: relative;
+  min-width: 60px;
+}
+
+.w-rich-editor td > p,
+.w-rich-editor th > p {
+  margin: 0;
+}
+
+/* Header cells */
+.w-rich-editor th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #374151;
+}
+
+/* Column resize handle (injected by prosemirror-tables columnResizing) */
+.w-rich-editor .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: #6366f1;
+  pointer-events: none;
+  z-index: 10;
+  cursor: col-resize;
+}
+
+/* Selected cell highlight (prosemirror-tables CellSelection) */
+.w-rich-editor .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(99, 102, 241, 0.15);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ProseMirror adds .ProseMirror-selectednode to the table when selected */
+.w-rich-editor table.ProseMirror-selectednode {
+  outline: 2px solid #6366f1;
+}
+
+/* prosemirror-tables adds .resize-cursor to EditorView during column resize */
+.w-rich-editor.resize-cursor,
+.w-rich-editor.resize-cursor td,
+.w-rich-editor.resize-cursor th,
+.w-rich-editor .resizing,
+.w-rich-editor .resizing td,
+.w-rich-editor .resizing th {
+  cursor: col-resize;
+}

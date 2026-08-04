@@ -11,6 +11,7 @@ export { TaskList, TaskItem } from './extensions/TaskList.js'
 export { Blockquote } from './extensions/Blockquote.js'
 export { CodeBlock } from './extensions/CodeBlock.js'
 export { Divider } from './extensions/Divider.js'
+export { Table, TableRow, TableCell, TableHeader } from './extensions/Table.js'
 
 // Marks
 export { Bold } from './extensions/Bold.js'

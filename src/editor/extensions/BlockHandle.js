@@ -25,13 +25,8 @@ function buildHandleDOM({ onDragStart, onDragEnd }) {
   handle.appendChild(gripIcon())
 
   handle.addEventListener('mouseenter', () => {
+    clearTimeout(hideTimeout)
     handle.style.opacity = '1'
-  })
-
-  handle.addEventListener('mouseleave', () => {
-    if (!handle.classList.contains('is-dragging-source')) {
-      handle.style.opacity = ''
-    }
   })
 
   handle.addEventListener('mousedown', (e) => {
@@ -49,11 +44,12 @@ function buildHandleDOM({ onDragStart, onDragEnd }) {
 // ============================================================================
 
 /**
- * Find the top-level (outermost) block position at the given mouse coordinates.
- * Returns { pos, node, rect, dom } or null.
+ * Find the draggable block at the given mouse coordinates.
+ * Returns { pos, depth, node, rect, dom } or null.
  *
- * Only outermost blocks (direct children of the document) qualify — nested
- * blocks inside lists, blockquotes, etc. don't get individual handles.
+ * If the cursor is inside a list_item or task_item, that item is returned
+ * as the draggable unit (enabling per-item drag). Otherwise, falls back to
+ * the top-level block (depth 1).
  */
 function findBlockAtCoords(view, clientX, clientY) {
   let posInfo
@@ -71,9 +67,29 @@ function findBlockAtCoords(view, clientX, clientY) {
   if (pos > state.doc.content.size) pos = state.doc.content.size
   const $pos = state.doc.resolve(pos)
 
-  // Walk up to depth 1 (doc's direct children only)
   if ($pos.depth < 1) return null
 
+  // Check if we're inside a list_item / task_item — if so, use that item
+  // as the draggable unit instead of the entire list wrapper.
+  const listItemType = state.schema.nodes.list_item
+  const taskItemType = state.schema.nodes.task_item
+
+  for (let d = $pos.depth; d > 1; d--) {
+    const node = $pos.node(d)
+    if (node.type === listItemType || node.type === taskItemType) {
+      const dom = view.nodeDOM($pos.before(d))
+      if (!dom || !(dom instanceof HTMLElement)) return null
+      return {
+        pos: $pos.before(d),
+        depth: d,
+        node,
+        rect: dom.getBoundingClientRect(),
+        dom,
+      }
+    }
+  }
+
+  // Fallback: top-level block (depth 1)
   const blockDepth = 1
   const blockPos = $pos.before(blockDepth)
   const blockNode = $pos.node(blockDepth)
@@ -81,6 +97,9 @@ function findBlockAtCoords(view, clientX, clientY) {
   // Skip if it's not actually a block node
   const group = blockNode.type.spec.group
   if (!group || !group.split(' ').includes('block')) return null
+
+  // List blocks as a whole are not draggable — only individual items are
+  if (['bullet_list', 'ordered_list', 'task_list'].includes(blockNode.type.name)) return null
 
   const dom = view.nodeDOM(blockPos)
   if (!dom || !(dom instanceof HTMLElement)) return null
@@ -137,11 +156,14 @@ export const BlockHandle = Extension.create({
               updateHandleVisibility(view, ext, event)
               return false
             },
-            mouseleave: (view) => {
+            mouseleave: (view, event) => {
               if (!ext._handle) return false
               if (ext._dragging) return false
-              ext._handle.style.opacity = '0'
-              ext._handle.style.pointerEvents = 'none'
+              // Don't hide if mouse moved to the handle itself
+              if (event.relatedTarget && ext._handle.contains(event.relatedTarget)) {
+                return false
+              }
+              scheduleHide(ext)
               return false
             },
           },
@@ -166,6 +188,15 @@ function updateHandleVisibility(view, ext, event) {
 
   const block = findBlockAtCoords(view, event.clientX, event.clientY)
   if (!block || !ext._handle) {
+    // Check if mouse is in the "approach zone" between handle and current block
+    // This prevents the handle from disappearing when the mouse crosses the gap
+    if (isInApproachZone(ext, event)) {
+      clearTimeout(hideTimeout)
+      // Re-show handle in case the handle's own mouseleave hid it
+      ext._handle.style.opacity = '1'
+      ext._handle.style.pointerEvents = 'auto'
+      return
+    }
     scheduleHide(ext)
     return
   }
@@ -181,12 +212,43 @@ function updateHandleVisibility(view, ext, event) {
   ext._currentBlock = block
 }
 
+/**
+ * Check if the mouse is in the "approach zone" between the handle and the
+ * current block. This prevents the handle from disappearing when the mouse
+ * crosses the gap between the handle and the block edge.
+ */
+function isInApproachZone(ext, event) {
+  if (!ext._handle || !ext._currentBlock) return false
+  const handleRect = ext._handle.getBoundingClientRect()
+  const blockRect = ext._currentBlock.rect
+
+  // Mouse is in approach zone if:
+  // - Y is within handle's vertical range (with small tolerance)
+  // - X is between handle's right edge and block's left edge (the gap)
+  const yTolerance = 4
+  const inYRange = event.clientY >= handleRect.top - yTolerance &&
+                   event.clientY <= handleRect.bottom + yTolerance
+  const inXRange = event.clientX >= handleRect.right &&
+                   event.clientX <= blockRect.left
+
+  return inYRange && inXRange
+}
+
 function positionHandleAtBlock(ext, block) {
   if (!ext._handle) return
   const handle = ext._handle
 
-  // Position handle to the LEFT of the block
-  const left = block.rect.left - 28
+  // For list items, use the parent list element's left edge so that the
+  // handle aligns horizontally with top-level block handles.
+  let leftEdge = block.rect.left
+  if (['list_item', 'task_item'].includes(block.node.type.name)) {
+    const listEl = block.dom.closest('ul, ol')
+    if (listEl) {
+      leftEdge = listEl.getBoundingClientRect().left
+    }
+  }
+
+  const left = leftEdge - 28
   const top = block.rect.top + 2
 
   handle.style.position = 'fixed'
@@ -223,6 +285,47 @@ function syncHandlePosition(view, ext) {
 // ============================================================================
 
 let dropIndicator = null
+
+/**
+ * Return true if the given node is a list_item or task_item.
+ */
+function isListItem(node, state) {
+  const listItemType = state.schema.nodes.list_item
+  const taskItemType = state.schema.nodes.task_item
+  return (listItemType && node.type === listItemType) ||
+         (taskItemType && node.type === taskItemType)
+}
+
+/**
+ * Find the nearest ancestor list node (bullet_list, ordered_list, or
+ * task_list) containing the given position. Returns { pos, node } or null.
+ */
+function findParentList(state, pos) {
+  if (pos > state.doc.content.size) pos = state.doc.content.size
+  const $pos = state.doc.resolve(pos)
+  const listTypeNames = ['bullet_list', 'ordered_list', 'task_list']
+  for (let d = $pos.depth; d > 0; d--) {
+    const node = $pos.node(d)
+    if (listTypeNames.includes(node.type.name)) {
+      return { pos: $pos.before(d), node }
+    }
+  }
+  return null
+}
+
+/**
+ * Determine the list type for a new wrapper list when dragging a list item
+ * out of its parent list. Preserves the source list's type (bullet/ordered/task),
+ * defaulting to bullet_list.
+ */
+function getListType(sourceList, state) {
+  if (sourceList && sourceList.node) {
+    const t = sourceList.node.type
+    if (t === state.schema.nodes.ordered_list) return t
+    if (t === state.schema.nodes.task_list) return t
+  }
+  return state.schema.nodes.bullet_list
+}
 
 function startDrag(view, ext, event) {
   if (!ext._currentBlock) return
@@ -288,22 +391,42 @@ function finishDrag(view, ext) {
   // Apply the move
   if (targetPos != null && targetPos !== sourcePos) {
     const { state, dispatch } = view
-    let tr = state.tr
+    const sourceIsListItem = isListItem(sourceNode, state)
 
-    // Calculate insertion position (after removing source)
+    // Determine source list context
+    const sourceList = sourceIsListItem ? findParentList(state, sourcePos) : null
+    const targetList = findParentList(state, targetPos)
+    const sameList = sourceList && targetList && sourceList.pos === targetList.pos
+
+    // Determine what to delete and what to insert
+    let deleteFrom = sourcePos
+    let deleteTo = sourcePos + sourceNode.nodeSize
+    let insertNode = sourceNode
+
+    if (sourceIsListItem && !sameList) {
+      // Dropping outside the source list → wrap item in a new single-item list
+      const listType = getListType(sourceList, state)
+      insertNode = listType.create(null, sourceNode)
+
+      // If this is the only item in the list, delete the entire (now-empty) list
+      if (sourceList && sourceList.node.childCount === 1) {
+        deleteFrom = sourceList.pos
+        deleteTo = sourceList.pos + sourceList.node.nodeSize
+      }
+    }
+
+    // Calculate insertion position (before or after target).
+    // insertPos is in the PRE-delete coordinate system — tr.mapping.map()
+    // will convert it to the post-delete system, so no manual adjustment needed.
     let insertPos = targetPos
     if (!insertBefore) {
       insertPos = targetPos + state.doc.nodeAt(targetPos).nodeSize
     }
-    // If target was after source, adjust for removal
-    if (targetPos > sourcePos) {
-      insertPos -= sourceNode.nodeSize
-    }
 
-    tr = tr.delete(sourcePos, sourcePos + sourceNode.nodeSize)
-    // Re-resolve insertion point after delete
+    let tr = state.tr
+    tr = tr.delete(deleteFrom, deleteTo)
     const mappedPos = tr.mapping.map(insertPos)
-    tr = tr.insert(mappedPos, sourceNode)
+    tr = tr.insert(mappedPos, insertNode)
     dispatch(tr)
   }
 
